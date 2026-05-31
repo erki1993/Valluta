@@ -3,6 +3,236 @@
 {% block title %}Valluta – Display{% endblock %}
 
 {% block content %}
-<h1>Display Screen</h1>
-<p>Big screen view — game content will appear here.</p>
+<div id="tv-layout">
+    <section id="board-section" aria-label="Game board">
+        <div id="game-grid" role="grid" aria-label="5 by 5 game grid"></div>
+    </section>
+    <aside id="sidebar" aria-label="Players">
+        <h2>Players</h2>
+        <div id="players-list"></div>
+    </aside>
+</div>
+<div id="battle-banner" hidden aria-live="polite">
+    <div class="battle-name">- vs -</div>
+    <div class="battle-timers">00:00 · 00:00</div>
+</div>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background: #050505;
+        color: #ffffff;
+        font-family: "Arial Black", Arial, sans-serif;
+    }
+    #tv-layout {
+        min-height: 100vh;
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: 1fr 22rem;
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+    #board-section {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    #game-grid {
+        width: min(88vh, 76vw);
+        height: min(88vh, 76vw);
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        grid-template-rows: repeat(5, 1fr);
+        gap: 0.65rem;
+    }
+    .grid-square {
+        border-radius: 0.6rem;
+        border: 0.32rem solid rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 0.35rem;
+        font-size: clamp(1rem, 1.8vw, 1.8rem);
+        line-height: 1.1;
+        font-weight: 900;
+        text-shadow: 0 0.15rem 0.4rem rgba(0, 0, 0, 0.85);
+        box-shadow: inset 0 0 0.5rem rgba(0, 0, 0, 0.35);
+    }
+    .battle-highlight {
+        animation: battlePulse 1s infinite;
+        border-color: #ffe600;
+    }
+    #sidebar {
+        background: #101010;
+        border: 0.22rem solid #2f2f2f;
+        border-radius: 0.8rem;
+        padding: 1rem;
+    }
+    #sidebar h2 {
+        font-size: clamp(1.4rem, 2.4vw, 2.2rem);
+        margin: 0 0 0.8rem;
+        text-transform: uppercase;
+    }
+    .player-row {
+        display: grid;
+        grid-template-columns: 2rem 1fr auto;
+        align-items: center;
+        gap: 0.7rem;
+        font-size: clamp(1rem, 1.5vw, 1.5rem);
+        padding: 0.5rem;
+        margin-bottom: 0.45rem;
+        border-radius: 0.45rem;
+        background: #1a1a1a;
+    }
+    .player-color {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 0.2rem;
+        border: 0.14rem solid #ffffff;
+    }
+    .player-meta {
+        text-align: right;
+        font-size: 0.9em;
+    }
+    .player-eliminated {
+        opacity: 0.5;
+    }
+    #battle-banner {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 44rem;
+        max-width: 88vw;
+        text-align: center;
+        background: rgba(0, 0, 0, 0.84);
+        border: 0.28rem solid #ffe600;
+        border-radius: 0.8rem;
+        padding: 1.2rem 2.2rem;
+        z-index: 100;
+        box-shadow: 0 0 2.2rem rgba(0, 0, 0, 0.9);
+    }
+    .battle-name {
+        font-size: clamp(2rem, 4.1vw, 4.2rem);
+        text-transform: uppercase;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+    }
+    .battle-timers {
+        margin-top: 0.45rem;
+        font-size: clamp(1.4rem, 3vw, 3rem);
+        color: #ffe600;
+        font-weight: 900;
+    }
+    @keyframes battlePulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(255, 230, 0, 0.9);
+        }
+        70% {
+            box-shadow: 0 0 0 0.85rem rgba(255, 230, 0, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(255, 230, 0, 0);
+        }
+    }
+</style>
+<script>
+    const GRID_SIZE = 5;
+    const NEUTRAL_COLOR = "#555555";
+    const gameGrid = document.getElementById("game-grid");
+    const playersList = document.getElementById("players-list");
+    const battleBanner = document.getElementById("battle-banner");
+    const battleName = battleBanner.querySelector(".battle-name");
+    const battleTimers = battleBanner.querySelector(".battle-timers");
+
+    const createSquareElement = () => {
+        const square = document.createElement("div");
+        square.className = "grid-square";
+        return square;
+    };
+
+    const ensureGrid = () => {
+        if (gameGrid.childElementCount === GRID_SIZE * GRID_SIZE) {
+            return;
+        }
+
+        gameGrid.innerHTML = "";
+        for (let index = 0; index < GRID_SIZE * GRID_SIZE; index += 1) {
+            gameGrid.appendChild(createSquareElement());
+        }
+    };
+
+    const renderSquares = (state) => {
+        ensureGrid();
+        const squaresByKey = new Map(
+            (state.squares || []).map((square) => [`${square.row}:${square.col}`, square])
+        );
+        const highlightedSquares = new Set(
+            ((state.battle && state.battle.highlight_squares) || []).map((square) => `${square.row}:${square.col}`)
+        );
+
+        for (let row = 0; row < GRID_SIZE; row += 1) {
+            for (let col = 0; col < GRID_SIZE; col += 1) {
+                const square = squaresByKey.get(`${row}:${col}`);
+                const squareEl = gameGrid.children[(row * GRID_SIZE) + col];
+                squareEl.style.backgroundColor = square && square.owner_color ? square.owner_color : NEUTRAL_COLOR;
+                squareEl.textContent = square && square.owner_name ? square.owner_name : "";
+                squareEl.classList.toggle("battle-highlight", highlightedSquares.has(`${row}:${col}`));
+            }
+        }
+    };
+
+    const renderPlayers = (players) => {
+        playersList.innerHTML = "";
+        (players || []).forEach((player) => {
+            const row = document.createElement("div");
+            row.className = "player-row";
+            if (player.is_eliminated) {
+                row.classList.add("player-eliminated");
+            }
+            row.innerHTML = `
+                <span class="player-color" style="background:${player.color};"></span>
+                <span>${player.name}</span>
+                <span class="player-meta">Score: ${player.score}<br>${player.is_eliminated ? "Eliminated" : "Active"}</span>
+            `;
+            playersList.appendChild(row);
+        });
+    };
+
+    const renderBattle = (battle) => {
+        if (!battle || !battle.active) {
+            battleBanner.hidden = true;
+            return;
+        }
+
+        battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
+        battleTimers.textContent = `${battle.attacker_timer} · ${battle.defender_timer}`;
+        battleBanner.hidden = false;
+    };
+
+    const renderState = (state) => {
+        renderSquares(state);
+        renderPlayers(state.players);
+        renderBattle(state.battle);
+    };
+
+    const pollState = async () => {
+        try {
+            const response = await fetch("/api/game/state/");
+            if (!response.ok) {
+                throw new Error(`Status ${response.status}`);
+            }
+            const state = await response.json();
+            renderState(state);
+        } catch (error) {
+            battleBanner.hidden = false;
+            battleName.textContent = "Waiting for game state";
+            battleTimers.textContent = error.message;
+        }
+    };
+
+    pollState();
+    setInterval(pollState, 1000);
+</script>
 {% endblock %}
