@@ -1,6 +1,7 @@
 from django.core.validators import RegexValidator
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 hex_color_validator = RegexValidator(
@@ -114,6 +115,7 @@ class Battle(models.Model):
     )
     attacker_score = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     defender_score = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    turn_started_at = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     winner = models.ForeignKey(
         GamePlayer,
