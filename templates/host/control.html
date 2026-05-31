@@ -11,7 +11,7 @@
     {% endfor %}
 </select>
 
-<button id="start-game-button" {% if not active_games %}disabled{% endif %}>Start Game</button>
+<button id="start-game-button" aria-describedby="start-game-message" {% if not active_games %}disabled{% endif %}>Start Game</button>
 <p id="start-game-message" aria-live="polite"></p>
 <script>
     const activeGameSelect = document.getElementById("active-game-select");
@@ -29,9 +29,9 @@
     }
 
     startGameButton.addEventListener("click", async () => {
-        const selectedGameId = activeGameSelect.value;
+        const selectedGameId = Number.parseInt(activeGameSelect.value, 10);
 
-        if (!selectedGameId) {
+        if (!Number.isInteger(selectedGameId) || selectedGameId <= 0) {
             startGameMessage.textContent = "Please select an active game.";
             return;
         }
@@ -46,11 +46,12 @@
                     "Content-Type": "application/json",
                     "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
                 },
-                body: JSON.stringify({ game_id: Number(selectedGameId) }),
+                body: JSON.stringify({ game_id: selectedGameId }),
             });
 
             if (!response.ok) {
-                throw new Error(`Request failed with status ${response.status}`);
+                const errorDetails = await response.text();
+                throw new Error(`Request failed with status ${response.status} ${response.statusText}: ${errorDetails}`);
             }
 
             startGameMessage.textContent = "Game start request sent.";
