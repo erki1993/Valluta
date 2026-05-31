@@ -21,6 +21,15 @@ class ControlViewTests(TestCase):
         self.assertContains(response, 'id="battle-section"')
 
 
+class DisplayViewTests(TestCase):
+    def test_display_view_contains_big_screen_layout(self):
+        response = self.client.get(reverse("display:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="game-grid"')
+        self.assertContains(response, "/api/game/state/")
+
+
 class BattleApiTests(TestCase):
     def setUp(self):
         self.game = Game.objects.create(status=Game.Status.ACTIVE)
@@ -135,3 +144,65 @@ class BattleApiTests(TestCase):
         self.assertEqual(self.battle.winner, self.attacker)
         self.assertEqual(self.contested_square.owner, self.attacker)
         self.assertIsNone(self.other_defender_square.owner)
+
+
+class GameStateApiTests(TestCase):
+    def setUp(self):
+        self.game = Game.objects.create(status=Game.Status.ACTIVE)
+        self.topic = Topic.objects.create(name="Science")
+        self.attacker_player = Player.objects.create(name="Alice", color="#FF5733")
+        self.defender_player = Player.objects.create(name="Bob", color="#33A1FF")
+        self.attacker = GamePlayer.objects.create(
+            game=self.game,
+            player=self.attacker_player,
+            topic=self.topic,
+        )
+        self.defender = GamePlayer.objects.create(
+            game=self.game,
+            player=self.defender_player,
+            topic=self.topic,
+        )
+        self.contested_square = Square.objects.create(
+            game=self.game,
+            row=0,
+            col=0,
+            owner=self.defender,
+        )
+        Square.objects.create(
+            game=self.game,
+            row=0,
+            col=1,
+            owner=self.attacker,
+        )
+        for row in range(5):
+            for col in range(5):
+                if (row, col) in {(0, 0), (0, 1)}:
+                    continue
+                Square.objects.create(game=self.game, row=row, col=col)
+        self.battle = Battle.objects.create(
+            game=self.game,
+            attacker=self.attacker,
+            defender=self.defender,
+            contested_square=self.contested_square,
+            current_turn=Battle.Turn.ATTACKER,
+        )
+
+    def test_game_state_returns_grid_players_and_battle_data(self):
+        response = self.client.get("/api/game/state/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["grid_size"], 5)
+        self.assertEqual(len(payload["squares"]), 25)
+        self.assertCountEqual(
+            [player["name"] for player in payload["players"]],
+            ["Alice", "Bob"],
+        )
+        self.assertEqual(
+            {player["name"]: player["score"] for player in payload["players"]},
+            {"Alice": 1, "Bob": 1},
+        )
+        self.assertTrue(payload["battle"]["active"])
+        self.assertEqual(payload["battle"]["attacker_name"], "Alice")
+        self.assertEqual(payload["battle"]["defender_name"], "Bob")
+        self.assertGreaterEqual(len(payload["battle"]["highlight_squares"]), 1)
