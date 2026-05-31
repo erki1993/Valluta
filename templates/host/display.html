@@ -169,7 +169,7 @@
             (state.squares || []).map((square) => [`${square.row}:${square.col}`, square])
         );
         const highlightedSquares = new Set(
-            ((state.battle && state.battle.highlight_squares) || []).map((square) => `${square.row}:${square.col}`)
+            (state.battle?.highlight_squares || []).map((square) => `${square.row}:${square.col}`)
         );
 
         for (let row = 0; row < GRID_SIZE; row += 1) {
@@ -228,7 +228,7 @@
         } catch (error) {
             battleBanner.hidden = false;
             battleName.textContent = "Waiting for game state";
-            battleTimers.textContent = error.message;
+            battleTimers.textContent = "Connection issue";
         }
     };
 

@@ -85,7 +85,7 @@ def _serialize_game_state(game: Game | None) -> dict:
     game_players = list(
         GamePlayer.objects.filter(game=game)
         .select_related("player")
-        .order_by("player__name", "id")
+        .order_by("id")
     )
     owner_counts = {
         entry["owner_id"]: entry["count"]
@@ -98,7 +98,7 @@ def _serialize_game_state(game: Game | None) -> dict:
     for square in (
         Square.objects.filter(game=game)
         .select_related("owner__player")
-        .order_by("row", "col", "id")
+        .order_by("row", "col")
     ):
         owner_name = square.owner.player.name if square.owner_id else None
         owner_color = square.owner.player.color if square.owner_id else None
@@ -120,7 +120,7 @@ def _serialize_game_state(game: Game | None) -> dict:
         attacker_square = (
             Square.objects.filter(game=game, owner=battle.attacker)
             .exclude(id=contested_square.id)
-            .order_by("row", "col", "id")
+            .order_by("row", "col")
             .first()
         )
 
