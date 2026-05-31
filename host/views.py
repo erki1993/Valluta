@@ -268,7 +268,7 @@ def api_create_game(request):
         available_topics = [topics_with_questions[topic.id] for topic in topics]
         for index, player_payload in enumerate(players):
             player = Player.objects.create(
-                name=player_payload["name"] or f"Player {index + 1}",
+                name=player_payload["name"],
                 color=player_payload["color"],
             )
             game_players.append(

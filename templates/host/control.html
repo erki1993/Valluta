@@ -126,7 +126,7 @@
     const battleCorrectButton = document.getElementById("battle-correct-button");
     const battleWrongButton = document.getElementById("battle-wrong-button");
     let ws = null;
-    const DEFAULT_COLORS = ["#FF5733", "#33A1FF", "#7D3C98", "#27AE60", "#f59e0b", "#14b8a6", "#ec4899", "#6366f1"];
+    const defaultColors = ["#FF5733", "#33A1FF", "#7D3C98", "#27AE60", "#f59e0b", "#14b8a6", "#ec4899", "#6366f1"];
 
     const getCookie = (name) => {
         const cookiePrefix = `${name}=`;
@@ -167,7 +167,7 @@
 
             const colorInput = document.createElement("input");
             colorInput.type = "color";
-            colorInput.value = DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+            colorInput.value = defaultColors[i % defaultColors.length];
             colorInput.dataset.role = "color";
 
             row.appendChild(nameInput);
@@ -179,7 +179,7 @@
     const gatherPlayers = () =>
         Array.from(playersConfig.querySelectorAll(".player-config-row")).map((row, index) => ({
             name: (row.querySelector('[data-role="name"]').value || `Player ${index + 1}`).trim(),
-            color: row.querySelector('[data-role="color"]').value || DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+            color: row.querySelector('[data-role="color"]').value || defaultColors[index % defaultColors.length],
         }));
 
     const selectedTopics = () =>
