@@ -110,7 +110,18 @@ class QuestionAdmin(admin.ModelAdmin):
                         if not topic_name and not question_text and not answer_text:
                             continue
                         if not topic_name or not question_text or not answer_text:
-                            raise ValueError(f"Row {row_number} has empty required values.")
+                            missing = [
+                                column
+                                for column, value in {
+                                    "topic": topic_name,
+                                    "question": question_text,
+                                    "answer": answer_text,
+                                }.items()
+                                if not value
+                            ]
+                            raise ValueError(
+                                f"Row {row_number} is missing values for: {', '.join(missing)}."
+                            )
 
                         topic = topic_cache.get(topic_name)
                         if topic is None:

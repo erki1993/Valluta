@@ -197,12 +197,17 @@
         activeTopicsSelect.innerHTML = "";
         topics.forEach((topic) => {
             const row = document.createElement("tr");
-            row.innerHTML = `<td>${topic.name}</td><td>${topic.question_count}</td>`;
+            const topicCell = document.createElement("td");
+            topicCell.textContent = topic.name;
+            const countCell = document.createElement("td");
+            countCell.textContent = String(topic.question_count);
+            row.appendChild(topicCell);
+            row.appendChild(countCell);
             topicsTableBody.appendChild(row);
 
             const option = document.createElement("option");
             option.value = topic.id;
-            option.textContent = `${topic.name} (${topic.question_count})`;
+            option.textContent = `${topic.name} - ${topic.question_count}`;
             option.selected = true;
             activeTopicsSelect.appendChild(option);
         });

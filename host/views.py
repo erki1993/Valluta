@@ -28,8 +28,8 @@ def display(request):
 
 
 def control(request):
-    active_games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
-    return render(request, "host/control.html", {"active_games": active_games})
+    available_games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
+    return render(request, "host/control.html", {"active_games": available_games})
 
 
 def _format_timer(milliseconds: int) -> str:
@@ -253,7 +253,13 @@ def api_create_game(request):
         .order_by("id")
     )
     if len(topics_with_questions) != len(topics):
-        return HttpResponseBadRequest("All selected topics must have at least one question.")
+        topics_with_questions_ids = {topic.id for topic in topics_with_questions}
+        missing_names = [
+            topic.name for topic in topics if topic.id not in topics_with_questions_ids
+        ]
+        return HttpResponseBadRequest(
+            f"Selected topics without questions: {', '.join(missing_names)}."
+        )
 
     players = _normalize_players_payload(payload.get("players", []))
     if not players:
