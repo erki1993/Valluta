@@ -51,15 +51,14 @@ class Command(BaseCommand):
         Square.objects.bulk_create(squares)
 
         available_squares = list(game.squares.all())
+        owned_squares = []
         for game_player, square in zip(
             game_players,
             random.sample(available_squares, len(game_players)),
         ):
             square.owner = game_player
+            owned_squares.append(square)
 
-        Square.objects.bulk_update(
-            [square for square in available_squares if square.owner_id is not None],
-            ["owner"],
-        )
+        Square.objects.bulk_update(owned_squares, ["owner"])
 
         self.stdout.write(self.style.SUCCESS(f"Seeded demo game {game.pk}"))

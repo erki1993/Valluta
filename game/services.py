@@ -4,6 +4,12 @@ from game.models import Game, GamePlayer
 
 
 def start_game(game_id):
+    """
+    Activate the game and return a random active GamePlayer.
+
+    Raises Game.DoesNotExist when the given game does not exist.
+    Returns None when the game has no non-eliminated players with active Player records.
+    """
     game = Game.objects.get(pk=game_id)
     game.status = Game.Status.ACTIVE
     game.save(update_fields=["status"])
