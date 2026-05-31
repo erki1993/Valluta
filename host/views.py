@@ -267,6 +267,8 @@ def api_create_game(request):
             {"name": "Player 1", "color": "#FF5733"},
             {"name": "Player 2", "color": "#33A1FF"},
         ]
+    if len(players) > 25:
+        return HttpResponseBadRequest("A game supports at most 25 players.")
 
     with transaction.atomic():
         game = Game.objects.create(status=Game.Status.LOBBY)

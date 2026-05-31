@@ -256,3 +256,21 @@ class GameSetupApiTests(TestCase):
         self.assertEqual(game.game_players.count(), 3)
         self.assertEqual(game.squares.count(), 25)
         self.assertEqual(game.squares.filter(owner__isnull=False).count(), 3)
+
+    def test_create_game_rejects_more_than_twenty_five_players(self):
+        players = [
+            {"name": f"Player {idx + 1}", "color": "#FF5733"}
+            for idx in range(26)
+        ]
+        response = self.client.post(
+            "/api/game/create/",
+            data=json.dumps(
+                {
+                    "active_topics": [self.science.id],
+                    "players": players,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at most 25 players", response.content.decode())
