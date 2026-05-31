@@ -13,11 +13,66 @@
 
 <button id="start-game-button" aria-describedby="start-game-message" {% if not active_games %}disabled{% endif %}>Start Game</button>
 <p id="start-game-message" aria-live="polite"></p>
+<section id="battle-section" hidden>
+    <h2>Active battle</h2>
+    <p id="battle-status-message" aria-live="polite"></p>
+    <div id="battle-players">
+        <div id="attacker-card">
+            <h3>Attacker</h3>
+            <p><strong id="attacker-name">-</strong></p>
+            <p>Time: <span id="attacker-time">00:00</span></p>
+            <p>Score: <span id="attacker-score">0</span></p>
+        </div>
+        <div id="defender-card">
+            <h3>Defender</h3>
+            <p><strong id="defender-name">-</strong></p>
+            <p>Time: <span id="defender-time">00:00</span></p>
+            <p>Score: <span id="defender-score">0</span></p>
+        </div>
+    </div>
+    <p>Question: <span id="battle-question">-</span></p>
+    <div>
+        <button id="battle-correct-button" type="button">Correct ✓</button>
+        <button id="battle-wrong-button" type="button">Wrong ✗</button>
+    </div>
+</section>
+<style>
+    #battle-players {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    #battle-players > div {
+        border: 1px solid #ccc;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        min-width: 12rem;
+    }
+    .turn-active {
+        border-color: #1f6feb !important;
+        background: #eef5ff;
+    }
+</style>
 <script>
     const activeGameSelect = document.getElementById("active-game-select");
     const startGameButton = document.getElementById("start-game-button");
     const startGameMessage = document.getElementById("start-game-message");
+    const battleSection = document.getElementById("battle-section");
+    const battleStatusMessage = document.getElementById("battle-status-message");
+    const attackerCard = document.getElementById("attacker-card");
+    const defenderCard = document.getElementById("defender-card");
+    const attackerName = document.getElementById("attacker-name");
+    const defenderName = document.getElementById("defender-name");
+    const attackerTime = document.getElementById("attacker-time");
+    const defenderTime = document.getElementById("defender-time");
+    const attackerScore = document.getElementById("attacker-score");
+    const defenderScore = document.getElementById("defender-score");
+    const battleQuestion = document.getElementById("battle-question");
+    const battleCorrectButton = document.getElementById("battle-correct-button");
+    const battleWrongButton = document.getElementById("battle-wrong-button");
     const hasActiveGames = {{ active_games|yesno:"true,false" }};
+    let battlePollInterval = null;
+
     const getCookie = (name) => {
         const cookiePrefix = `${name}=`;
         const cookieEntry = document.cookie
@@ -32,15 +87,118 @@
         startGameMessage.textContent = "No active games available.";
     }
 
+    const getSelectedGameId = () => {
+        const selectedGameId = Number.parseInt(activeGameSelect.value, 10);
+        return Number.isInteger(selectedGameId) && selectedGameId > 0 ? selectedGameId : null;
+    };
+
+    const setBattleButtonsEnabled = (enabled) => {
+        battleCorrectButton.disabled = !enabled;
+        battleWrongButton.disabled = !enabled;
+    };
+
+    const renderBattleState = (state) => {
+        if (!state.active) {
+            battleSection.hidden = true;
+            battleStatusMessage.textContent = state.status === "finished" && state.winner_name
+                ? `Battle finished. Winner: ${state.winner_name}`
+                : "No active battle.";
+            setBattleButtonsEnabled(false);
+            return;
+        }
+
+        battleSection.hidden = false;
+        battleStatusMessage.textContent = "Battle in progress";
+        attackerName.textContent = state.attacker.name;
+        defenderName.textContent = state.defender.name;
+        attackerTime.textContent = state.attacker.time_remaining;
+        defenderTime.textContent = state.defender.time_remaining;
+        attackerScore.textContent = state.attacker.score;
+        defenderScore.textContent = state.defender.score;
+        battleQuestion.textContent = state.question_text || "-";
+        attackerCard.classList.toggle("turn-active", state.attacker.is_current_turn);
+        defenderCard.classList.toggle("turn-active", state.defender.is_current_turn);
+        setBattleButtonsEnabled(true);
+    };
+
+    const fetchBattleState = async () => {
+        const selectedGameId = getSelectedGameId();
+        if (!selectedGameId) {
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+            return;
+        }
+
+        const response = await fetch(`/api/battle/state/?game_id=${selectedGameId}`);
+        if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status} ${response.statusText}`);
+        }
+        const state = await response.json();
+        renderBattleState(state);
+    };
+
+    const submitBattleAnswer = async (isCorrect) => {
+        const selectedGameId = getSelectedGameId();
+        if (!selectedGameId) {
+            battleStatusMessage.textContent = "Please select an active game.";
+            return;
+        }
+
+        setBattleButtonsEnabled(false);
+        battleStatusMessage.textContent = "Submitting answer...";
+
+        try {
+            const response = await fetch("/api/battle/answer/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
+                },
+                body: JSON.stringify({ correct: isCorrect, game_id: selectedGameId }),
+            });
+
+            if (!response.ok) {
+                const errorDetails = await response.text();
+                throw new Error(`Request failed with status ${response.status} ${response.statusText}: ${errorDetails}`);
+            }
+
+            const state = await response.json();
+            renderBattleState(state);
+        } catch (error) {
+            battleStatusMessage.textContent = `Failed to submit answer: ${error.message}`;
+            setBattleButtonsEnabled(true);
+        }
+    };
+
+    const startBattlePolling = () => {
+        if (battlePollInterval !== null) {
+            clearInterval(battlePollInterval);
+        }
+
+        fetchBattleState().catch((error) => {
+            battleStatusMessage.textContent = `Failed to load battle state: ${error.message}`;
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+        });
+
+        battlePollInterval = setInterval(() => {
+            fetchBattleState().catch((error) => {
+                battleStatusMessage.textContent = `Failed to load battle state: ${error.message}`;
+                battleSection.hidden = true;
+                setBattleButtonsEnabled(false);
+            });
+        }, 1000);
+    };
+
     startGameButton.addEventListener("click", async () => {
         if (!hasActiveGames) {
             startGameMessage.textContent = "No active games available.";
             return;
         }
 
-        const selectedGameId = Number.parseInt(activeGameSelect.value, 10);
+        const selectedGameId = getSelectedGameId();
 
-        if (!Number.isInteger(selectedGameId) || selectedGameId <= 0) {
+        if (!selectedGameId) {
             startGameMessage.textContent = "Please select an active game.";
             return;
         }
@@ -64,11 +222,19 @@
             }
 
             startGameMessage.textContent = "Game start request sent.";
+            fetchBattleState().catch(() => {});
         } catch (error) {
             startGameMessage.textContent = `Failed to start game: ${error.message}`;
         } finally {
             startGameButton.disabled = !hasActiveGames;
         }
     });
+
+    activeGameSelect.addEventListener("change", () => {
+        startBattlePolling();
+    });
+    battleCorrectButton.addEventListener("click", () => submitBattleAnswer(true));
+    battleWrongButton.addEventListener("click", () => submitBattleAnswer(false));
+    startBattlePolling();
 </script>
 {% endblock %}
