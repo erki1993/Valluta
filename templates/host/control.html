@@ -18,17 +18,26 @@
     const startGameButton = document.getElementById("start-game-button");
     const startGameMessage = document.getElementById("start-game-message");
     const hasActiveGames = {{ active_games|yesno:"true,false" }};
-    const getCookie = (name) => document.cookie
-        .split(";")
-        .map((cookie) => cookie.trim())
-        .find((cookie) => cookie.startsWith(`${name}=`))
-        ?.split("=")[1] ?? "";
+    const getCookie = (name) => {
+        const cookiePrefix = `${name}=`;
+        const cookieEntry = document.cookie
+            .split(";")
+            .map((cookie) => cookie.trim())
+            .find((cookie) => cookie.startsWith(cookiePrefix));
+
+        return cookieEntry ? cookieEntry.slice(cookiePrefix.length) : "";
+    };
 
     if (!hasActiveGames) {
         startGameMessage.textContent = "No active games available.";
     }
 
     startGameButton.addEventListener("click", async () => {
+        if (!hasActiveGames) {
+            startGameMessage.textContent = "No active games available.";
+            return;
+        }
+
         const selectedGameId = Number.parseInt(activeGameSelect.value, 10);
 
         if (!Number.isInteger(selectedGameId) || selectedGameId <= 0) {
