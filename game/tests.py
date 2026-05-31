@@ -62,11 +62,10 @@ class SeedDemoCommandTests(TestCase):
     @patch("game.management.commands.seed_demo.random.choice")
     @patch("game.management.commands.seed_demo.random.sample")
     def test_seed_demo_creates_expected_demo_data(self, sample_mock, choice_mock):
-        topics = [Topic(name="Science"), Topic(name="History"), Topic(name="Sports")]
         chosen_topic_indexes = [0, 1, 2, 0]
 
-        def choose_topic(_):
-            return topics[chosen_topic_indexes.pop(0)]
+        def choose_topic(choices):
+            return choices[chosen_topic_indexes.pop(0)]
 
         choice_mock.side_effect = choose_topic
         sample_mock.side_effect = lambda population, count: population[:count]
