@@ -22,8 +22,10 @@ class ControlViewTests(TestCase):
         self.assertNotContains(response, f'value="{finished_game.id}"')
         self.assertContains(response, "Game Setup")
         self.assertContains(response, "/api/game/create/")
+        self.assertContains(response, "/api/game/new/")
         self.assertContains(response, "/api/topics/")
         self.assertContains(response, 'id="battle-section"')
+        self.assertContains(response, 'id="finished-game-section"')
 
 
 class DisplayViewTests(TestCase):
@@ -32,6 +34,8 @@ class DisplayViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="game-grid"')
+        self.assertContains(response, "VÕITJA!")
+        self.assertContains(response, "canvas-confetti")
         self.assertContains(response, "ws/game/")
 
 
@@ -142,13 +146,17 @@ class BattleApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.game.refresh_from_db()
+        self.defender.refresh_from_db()
         self.battle.refresh_from_db()
         self.contested_square.refresh_from_db()
         self.other_defender_square.refresh_from_db()
+        self.assertEqual(self.game.status, Game.Status.FINISHED)
         self.assertEqual(self.battle.status, Battle.Status.FINISHED)
         self.assertEqual(self.battle.winner, self.attacker)
         self.assertEqual(self.contested_square.owner, self.attacker)
         self.assertIsNone(self.other_defender_square.owner)
+        self.assertTrue(self.defender.is_eliminated)
 
 
 class GameStateApiTests(TestCase):
@@ -212,6 +220,32 @@ class GameStateApiTests(TestCase):
         self.assertEqual(payload["battle"]["defender_name"], "Bob")
         self.assertGreaterEqual(len(payload["battle"]["highlight_squares"]), 1)
 
+    def test_game_state_returns_winner_for_finished_game(self):
+        finished_game = Game.objects.create(status=Game.Status.FINISHED)
+        topic = Topic.objects.create(name="History")
+        winner_player = Player.objects.create(name="Cara", color="#7D3C98")
+        loser_player = Player.objects.create(name="Dan", color="#27AE60")
+        winner = GamePlayer.objects.create(
+            game=finished_game,
+            player=winner_player,
+            topic=topic,
+        )
+        GamePlayer.objects.create(
+            game=finished_game,
+            player=loser_player,
+            topic=topic,
+            is_eliminated=True,
+        )
+        Square.objects.create(game=finished_game, row=0, col=0, owner=winner)
+
+        response = self.client.get("/api/game/state/", {"game_id": finished_game.id})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["game"]["status"], Game.Status.FINISHED)
+        self.assertEqual(payload["game"]["winner_name"], "Cara")
+        self.assertEqual(payload["game"]["winner_color"], "#7D3C98")
+
 
 class GameSetupApiTests(TestCase):
     def setUp(self):
@@ -274,3 +308,45 @@ class GameSetupApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("at most 25 players", response.content.decode())
+
+    def test_new_game_endpoint_clones_finished_game_into_lobby(self):
+        finished_game = Game.objects.create(status=Game.Status.FINISHED)
+        first = GamePlayer.objects.create(
+            game=finished_game,
+            player=Player.objects.create(name="Alice", color="#FF5733"),
+            topic=self.science,
+        )
+        GamePlayer.objects.create(
+            game=finished_game,
+            player=Player.objects.create(name="Bob", color="#33A1FF"),
+            topic=self.history,
+            is_eliminated=True,
+        )
+        Square.objects.create(game=finished_game, row=0, col=0, owner=first)
+
+        response = self.client.post(
+            "/api/game/new/",
+            data=json.dumps({"game_id": finished_game.id}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        new_game = Game.objects.get(id=payload["game_id"])
+        self.assertEqual(new_game.status, Game.Status.LOBBY)
+        self.assertEqual(new_game.game_players.count(), 2)
+        self.assertEqual(new_game.squares.count(), 25)
+        self.assertEqual(new_game.squares.filter(owner__isnull=False).count(), 2)
+        self.assertEqual(
+            list(
+                new_game.game_players.order_by("id").values_list(
+                    "player__name",
+                    "player__color",
+                    "topic__name",
+                )
+            ),
+            [
+                ("Alice", "#FF5733", "Science"),
+                ("Bob", "#33A1FF", "History"),
+            ],
+        )

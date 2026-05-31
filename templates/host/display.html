@@ -16,6 +16,12 @@
     <div class="battle-name">- vs -</div>
     <div class="battle-timers">00:00 · 00:00</div>
 </div>
+<section id="winner-screen" hidden aria-live="polite">
+    <div id="winner-card">
+        <p id="winner-label">VÕITJA!</p>
+        <h1 id="winner-name">-</h1>
+    </div>
+</section>
 <style>
     body {
         margin: 0;
@@ -113,6 +119,42 @@
         z-index: 100;
         box-shadow: 0 0 2.2rem rgba(0, 0, 0, 0.9);
     }
+    #winner-screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background:
+            radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 35%),
+            linear-gradient(135deg, rgba(0, 0, 0, 0.96), rgba(20, 20, 20, 0.96));
+        z-index: 200;
+    }
+    #winner-card {
+        min-width: min(54rem, 100%);
+        text-align: center;
+        padding: 3rem 4rem;
+        border-radius: 1.4rem;
+        border: 0.35rem solid var(--winner-color, #ffe600);
+        background: rgba(0, 0, 0, 0.72);
+        box-shadow: 0 0 3rem color-mix(in srgb, var(--winner-color, #ffe600) 45%, transparent);
+    }
+    #winner-label {
+        margin: 0 0 1rem;
+        font-size: clamp(2.8rem, 6vw, 6rem);
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--winner-color, #ffe600);
+    }
+    #winner-name {
+        margin: 0;
+        font-size: clamp(3.4rem, 8vw, 8rem);
+        line-height: 1;
+        text-transform: uppercase;
+        text-shadow: 0 0 1.2rem rgba(0, 0, 0, 0.8);
+    }
     .battle-name {
         font-size: clamp(2rem, 4.1vw, 4.2rem);
         text-transform: uppercase;
@@ -137,14 +179,21 @@
         }
     }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 <script>
     const GRID_SIZE = 5;
     const NEUTRAL_COLOR = "#555555";
+    const tvLayout = document.getElementById("tv-layout");
     const gameGrid = document.getElementById("game-grid");
     const playersList = document.getElementById("players-list");
     const battleBanner = document.getElementById("battle-banner");
     const battleName = battleBanner.querySelector(".battle-name");
     const battleTimers = battleBanner.querySelector(".battle-timers");
+    const winnerScreen = document.getElementById("winner-screen");
+    const winnerCard = document.getElementById("winner-card");
+    const winnerName = document.getElementById("winner-name");
+    let celebrationKey = null;
+    let celebrationTimeoutId = null;
 
     const createSquareElement = () => {
         const square = document.createElement("div");
@@ -211,7 +260,57 @@
         battleBanner.hidden = false;
     };
 
+    const stopCelebration = () => {
+        celebrationKey = null;
+        if (celebrationTimeoutId !== null) {
+            clearTimeout(celebrationTimeoutId);
+            celebrationTimeoutId = null;
+        }
+    };
+
+    const launchCelebration = (color) => {
+        if (typeof window.confetti !== "function") {
+            return;
+        }
+
+        const colors = [color || "#ffe600", "#ffffff", "#ffe600"];
+        window.confetti({ particleCount: 180, spread: 100, startVelocity: 45, colors });
+        const burst = () => {
+            window.confetti({
+                particleCount: 80,
+                spread: 70,
+                origin: { x: Math.random(), y: Math.random() * 0.35 },
+                colors,
+            });
+        };
+        burst();
+        celebrationTimeoutId = window.setTimeout(burst, 600);
+    };
+
+    const renderWinner = (game) => {
+        const isFinished = game && game.status === "finished" && game.winner_name;
+        tvLayout.hidden = Boolean(isFinished);
+        battleBanner.hidden = Boolean(isFinished);
+        winnerScreen.hidden = !isFinished;
+        if (!isFinished) {
+            stopCelebration();
+            return;
+        }
+
+        const winnerColor = game.winner_color || "#ffe600";
+        winnerCard.style.setProperty("--winner-color", winnerColor);
+        winnerName.textContent = game.winner_name;
+
+        const nextCelebrationKey = `${game.id}:${game.winner_name}:${winnerColor}`;
+        if (celebrationKey !== nextCelebrationKey) {
+            stopCelebration();
+            celebrationKey = nextCelebrationKey;
+            launchCelebration(winnerColor);
+        }
+    };
+
     const renderState = (state) => {
+        renderWinner(state.game);
         renderSquares(state);
         renderPlayers(state.players);
         renderBattle(state.battle);
