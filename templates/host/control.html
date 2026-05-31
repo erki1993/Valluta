@@ -23,7 +23,7 @@
     </div>
     <div>
         <label for="player-count-input">Number of players</label>
-        <input id="player-count-input" type="number" min="1" max="8" value="2">
+        <input id="player-count-input" type="number" min="1" max="25" value="2">
     </div>
     <div id="players-config"></div>
     <button id="create-game-button" type="button">Create Game</button>
@@ -177,10 +177,13 @@
     };
 
     const gatherPlayers = () =>
-        Array.from(playersConfig.querySelectorAll(".player-config-row")).map((row, index) => ({
-            name: (row.querySelector('[data-role="name"]').value || `Player ${index + 1}`).trim(),
-            color: row.querySelector('[data-role="color"]').value || defaultColors[index % defaultColors.length],
-        }));
+        Array.from(playersConfig.querySelectorAll(".player-config-row")).map((row, index) => {
+            const enteredName = (row.querySelector('[data-role="name"]').value || "").trim();
+            return {
+                name: enteredName || `Player ${index + 1}`,
+                color: row.querySelector('[data-role="color"]').value || defaultColors[index % defaultColors.length],
+            };
+        });
 
     const selectedTopics = () =>
         Array.from(activeTopicsSelect.selectedOptions).map((option) => Number(option.value));
@@ -357,7 +360,7 @@
     });
 
     playerCountInput.addEventListener("change", () => {
-        const count = Math.max(1, Math.min(8, Number(playerCountInput.value) || 2));
+        const count = Math.max(1, Math.min(25, Number(playerCountInput.value) || 2));
         playerCountInput.value = String(count);
         buildPlayerInputs(count);
     });

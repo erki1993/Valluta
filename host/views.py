@@ -213,7 +213,7 @@ def _normalize_players_payload(players_payload):
     for index, player_data in enumerate(players_payload):
         if not isinstance(player_data, dict):
             continue
-        name = (player_data.get("name") or f"Player {index + 1}").strip()
+        name = (player_data.get("name") or "").strip() or f"Player {index + 1}"
         color = (player_data.get("color") or "").strip() or "#FF5733"
         players.append({"name": name[:255], "color": color})
     return players

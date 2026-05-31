@@ -3,7 +3,7 @@
 {% block content %}
 <div id="content-main">
   <h1>Import questions from CSV</h1>
-  <p>Upload a CSV with columns: <code>topic</code>, <code>question</code>, <code>answer</code>.</p>
+  <p>Upload a UTF-8 CSV with columns: <code>topic</code>, <code>question</code>, <code>answer</code>.</p>
 
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
