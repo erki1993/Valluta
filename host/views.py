@@ -16,6 +16,7 @@ from game.services import (
     answer_battle_question,
     ensure_current_question,
     get_active_battle,
+    get_game_winner,
     start_game,
     sync_battle_timer,
 )
@@ -30,6 +31,45 @@ def display(request):
 def control(request):
     available_games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
     return render(request, "host/control.html", {"active_games": available_games})
+
+
+def _create_lobby_game(player_configs: list[dict]) -> Game:
+    with transaction.atomic():
+        game = Game.objects.create(status=Game.Status.LOBBY)
+
+        game_players = []
+        for player_config in player_configs:
+            player = Player.objects.create(
+                name=player_config["name"],
+                color=player_config["color"],
+            )
+            game_players.append(
+                GamePlayer.objects.create(
+                    game=game,
+                    player=player,
+                    topic=player_config["topic"],
+                )
+            )
+
+        squares = [
+            Square(game=game, row=row, col=col)
+            for row in range(5)
+            for col in range(5)
+        ]
+        Square.objects.bulk_create(squares)
+
+        available_squares = list(game.squares.all())
+        owned_squares = []
+        for game_player, square in zip(
+            game_players,
+            random.sample(available_squares, len(game_players)),
+        ):
+            square.owner = game_player
+            owned_squares.append(square)
+
+        Square.objects.bulk_update(owned_squares, ["owner"])
+
+    return game
 
 
 def _format_timer(milliseconds: int) -> str:
@@ -99,6 +139,7 @@ def _serialize_game_state(game: Game | None) -> dict:
         .values("owner_id")
         .annotate(count=models.Count("id"))
     }
+    winner = get_game_winner(game.id)
 
     squares = []
     for square in (
@@ -180,7 +221,12 @@ def _serialize_game_state(game: Game | None) -> dict:
         }
 
     return {
-        "game": {"id": game.id, "status": game.status},
+        "game": {
+            "id": game.id,
+            "status": game.status,
+            "winner_name": winner.player.name if winner is not None else None,
+            "winner_color": winner.player.color if winner is not None else None,
+        },
         "grid_size": 5,
         "players": [
             {
@@ -270,42 +316,52 @@ def api_create_game(request):
     if len(players) > 25:
         return HttpResponseBadRequest("A game supports at most 25 players.")
 
-    with transaction.atomic():
-        game = Game.objects.create(status=Game.Status.LOBBY)
-
-        game_players = []
-        available_topics = topics_with_questions
-        for index, player_payload in enumerate(players):
-            player = Player.objects.create(
-                name=player_payload["name"],
-                color=player_payload["color"],
-            )
-            game_players.append(
-                GamePlayer.objects.create(
-                    game=game,
-                    player=player,
-                    topic=available_topics[index % len(available_topics)],
-                )
-            )
-
-        squares = [
-            Square(game=game, row=row, col=col)
-            for row in range(5)
-            for col in range(5)
+    game = _create_lobby_game(
+        [
+            {
+                "name": player_payload["name"],
+                "color": player_payload["color"],
+                "topic": topics_with_questions[index % len(topics_with_questions)],
+            }
+            for index, player_payload in enumerate(players)
         ]
-        Square.objects.bulk_create(squares)
+    )
 
-        available_squares = list(game.squares.all())
-        owned_squares = []
-        for game_player, square in zip(
-            game_players,
-            random.sample(available_squares, len(game_players)),
-        ):
-            square.owner = game_player
-            owned_squares.append(square)
+    return JsonResponse({"game_id": game.id})
 
-        Square.objects.bulk_update(owned_squares, ["owner"])
 
+@require_POST
+def api_new_game(request):
+    payload = _get_payload(request)
+    if payload is None:
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    game_id = payload.get("game_id")
+    if not isinstance(game_id, int) or game_id <= 0:
+        return HttpResponseBadRequest("game_id must be a positive integer.")
+
+    source_game = Game.objects.filter(id=game_id).first()
+    if source_game is None:
+        return JsonResponse({"error": "Game not found."}, status=404)
+    if source_game.status != Game.Status.FINISHED:
+        return HttpResponseBadRequest("Can only create a new game from a finished game.")
+
+    source_game_players = list(
+        source_game.game_players.select_related("player", "topic").order_by("id")
+    )
+    if not source_game_players:
+        return HttpResponseBadRequest("Finished game has no players to clone.")
+
+    game = _create_lobby_game(
+        [
+            {
+                "name": game_player.player.name,
+                "color": game_player.player.color,
+                "topic": game_player.topic,
+            }
+            for game_player in source_game_players
+        ]
+    )
     return JsonResponse({"game_id": game.id})
 
 

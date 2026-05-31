@@ -9,7 +9,7 @@ from django.urls import reverse
 
 from game.admin import QuestionAdmin, QuestionInline, TopicAdmin
 from game.models import Game, GamePlayer, Player, Question, Square, Topic
-from game.services import start_game
+from game.services import check_game_over, start_game
 
 
 class StartGameTests(TestCase):
@@ -60,6 +60,33 @@ class StartGameTests(TestCase):
         game.refresh_from_db()
         self.assertEqual(game.status, Game.Status.ACTIVE)
         self.assertIsNone(selected_game_player)
+
+
+class CheckGameOverTests(TestCase):
+    def test_check_game_over_finishes_game_when_one_player_has_squares_left(self):
+        game = Game.objects.create(status=Game.Status.ACTIVE)
+        topic = Topic.objects.create(name="Science")
+        alice = GamePlayer.objects.create(
+            game=game,
+            player=Player.objects.create(name="Alice", color="#FF5733"),
+            topic=topic,
+        )
+        bob = GamePlayer.objects.create(
+            game=game,
+            player=Player.objects.create(name="Bob", color="#33A1FF"),
+            topic=topic,
+        )
+        Square.objects.create(game=game, row=0, col=0, owner=alice)
+        Square.objects.create(game=game, row=0, col=1, owner=alice)
+        Square.objects.create(game=game, row=0, col=2, owner=None)
+
+        winner = check_game_over(game.id)
+
+        game.refresh_from_db()
+        bob.refresh_from_db()
+        self.assertEqual(game.status, Game.Status.FINISHED)
+        self.assertEqual(winner, alice)
+        self.assertTrue(bob.is_eliminated)
 
 
 class SeedDemoCommandTests(TestCase):

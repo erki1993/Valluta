@@ -38,6 +38,11 @@
 
 <button id="start-game-button" aria-describedby="start-game-message" {% if not active_games %}disabled{% endif %}>Start Game</button>
 <p id="start-game-message" aria-live="polite"></p>
+<section id="finished-game-section" hidden>
+    <h2>Game finished</h2>
+    <p>Winner: <strong id="winner-name">-</strong></p>
+    <button id="new-game-button" type="button">New Game</button>
+</section>
 <section id="battle-section" hidden>
     <h2>Active battle</h2>
     <p id="battle-status-message" aria-live="polite"></p>
@@ -96,6 +101,13 @@
         gap: 0.5rem;
         margin: 0.5rem 0;
     }
+    #finished-game-section {
+        margin: 1rem 0;
+        padding: 0.75rem;
+        border: 1px solid #ccc;
+        border-radius: 0.25rem;
+        background: #f6f8fa;
+    }
     .player-config-row {
         display: grid;
         grid-template-columns: 1fr 8rem;
@@ -112,6 +124,9 @@
     const activeGameSelect = document.getElementById("active-game-select");
     const startGameButton = document.getElementById("start-game-button");
     const startGameMessage = document.getElementById("start-game-message");
+    const finishedGameSection = document.getElementById("finished-game-section");
+    const winnerName = document.getElementById("winner-name");
+    const newGameButton = document.getElementById("new-game-button");
     const battleSection = document.getElementById("battle-section");
     const battleStatusMessage = document.getElementById("battle-status-message");
     const attackerCard = document.getElementById("attacker-card");
@@ -139,12 +154,16 @@
     };
 
     const hasAvailableGames = () => activeGameSelect.options.length > 0;
+    const getSelectedGameStatus = () => activeGameSelect.selectedOptions[0]?.dataset.status || null;
 
     const refreshStartGameAvailability = () => {
-        startGameButton.disabled = !hasAvailableGames();
+        const selectedGameFinished = getSelectedGameStatus() === "finished";
+        startGameButton.disabled = !hasAvailableGames() || selectedGameFinished;
         activeGameSelect.disabled = !hasAvailableGames();
         if (!hasAvailableGames()) {
             startGameMessage.textContent = "No active games available.";
+        } else if (selectedGameFinished) {
+            startGameMessage.textContent = "Selected game has finished.";
         }
     };
 
@@ -216,12 +235,23 @@
         });
     };
 
-    const addGameOption = (gameId) => {
+    const addGameOption = (gameId, status = "lobby") => {
         const option = document.createElement("option");
         option.value = String(gameId);
         option.textContent = `Game ${gameId}`;
+        option.dataset.status = status;
         activeGameSelect.prepend(option);
         activeGameSelect.value = String(gameId);
+        refreshStartGameAvailability();
+    };
+
+    const removeGameOption = (gameId) => {
+        const option = Array.from(activeGameSelect.options).find(
+            (entry) => Number(entry.value) === Number(gameId)
+        );
+        if (option) {
+            option.remove();
+        }
         refreshStartGameAvailability();
     };
 
@@ -252,6 +282,21 @@
         attackerCard.classList.toggle("turn-active", state.attacker.is_current_turn);
         defenderCard.classList.toggle("turn-active", state.defender.is_current_turn);
         setBattleButtonsEnabled(true);
+    };
+
+    const renderGameState = (state) => {
+        const selectedOption = activeGameSelect.selectedOptions[0];
+        if (selectedOption && state.game) {
+            selectedOption.dataset.status = state.game.status;
+        }
+
+        const gameFinished = state.game && state.game.status === "finished";
+        finishedGameSection.hidden = !gameFinished;
+        winnerName.textContent = state.game?.winner_name || "-";
+        if (gameFinished) {
+            startGameMessage.textContent = "Game finished.";
+        }
+        refreshStartGameAvailability();
     };
 
     const submitBattleAnswer = async (isCorrect) => {
@@ -304,6 +349,7 @@
 
         ws.addEventListener("message", (event) => {
             const state = JSON.parse(event.data);
+            renderGameState(state);
             renderBattleState(state.battle);
         });
 
@@ -356,6 +402,46 @@
             setupStatusMessage.textContent = `Failed to create game: ${error.message}`;
         } finally {
             createGameButton.disabled = false;
+        }
+    });
+
+    newGameButton.addEventListener("click", async () => {
+        const selectedGameId = getSelectedGameId();
+        if (!selectedGameId) {
+            startGameMessage.textContent = "Please select a finished game.";
+            return;
+        }
+
+        newGameButton.disabled = true;
+        startGameMessage.textContent = "Creating new game...";
+
+        try {
+            const response = await fetch("/api/game/new/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
+                },
+                body: JSON.stringify({ game_id: selectedGameId }),
+            });
+
+            if (!response.ok) {
+                const errorDetails = await response.text();
+                throw new Error(errorDetails || `HTTP ${response.status}`);
+            }
+
+            const payload = await response.json();
+            removeGameOption(selectedGameId);
+            addGameOption(payload.game_id, "lobby");
+            finishedGameSection.hidden = true;
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+            startGameMessage.textContent = `Game ${payload.game_id} is ready in lobby.`;
+            connectWebSocket(getSelectedGameId());
+        } catch (error) {
+            startGameMessage.textContent = `Failed to create new game: ${error.message}`;
+        } finally {
+            newGameButton.disabled = false;
         }
     });
 

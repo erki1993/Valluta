@@ -7,6 +7,58 @@ from django.utils import timezone
 from game.models import Battle, BattleQuestion, Game, GamePlayer, Question, Square
 
 
+def get_game_winner(game_id: int) -> GamePlayer | None:
+    game_players = list(
+        GamePlayer.objects.filter(game_id=game_id)
+        .select_related("player", "topic")
+        .order_by("id")
+    )
+    owner_ids = set(
+        Square.objects.filter(game_id=game_id, owner__isnull=False).values_list("owner_id", flat=True)
+    )
+
+    players_with_squares = [
+        game_player for game_player in game_players if game_player.id in owner_ids
+    ]
+    if len(players_with_squares) == 1:
+        return players_with_squares[0]
+
+    non_eliminated_players = [
+        game_player for game_player in game_players if not game_player.is_eliminated
+    ]
+    if len(non_eliminated_players) == 1:
+        return non_eliminated_players[0]
+
+    return None
+
+
+def check_game_over(game_id: int) -> GamePlayer | None:
+    game = Game.objects.get(pk=game_id)
+    game_players = list(
+        GamePlayer.objects.filter(game=game)
+        .select_related("player", "topic")
+        .order_by("id")
+    )
+    owner_ids = set(
+        Square.objects.filter(game=game, owner__isnull=False).values_list("owner_id", flat=True)
+    )
+
+    eliminated_player_ids = [
+        game_player.id
+        for game_player in game_players
+        if game_player.id not in owner_ids and not game_player.is_eliminated
+    ]
+    if eliminated_player_ids:
+        GamePlayer.objects.filter(id__in=eliminated_player_ids).update(is_eliminated=True)
+
+    winner = get_game_winner(game_id)
+    if winner is not None and game.status != Game.Status.FINISHED:
+        game.status = Game.Status.FINISHED
+        game.save(update_fields=["status"])
+
+    return winner
+
+
 def start_game(game_id: int) -> GamePlayer | None:
     """
     Activate the game and return a random active GamePlayer.
@@ -127,6 +179,7 @@ def resolve_battle(battle: Battle) -> Battle:
     battle.status = Battle.Status.FINISHED
     battle.winner = winner
     battle.save(update_fields=["status", "winner"])
+    check_game_over(battle.game_id)
     return battle
 
 
