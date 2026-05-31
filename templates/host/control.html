@@ -71,7 +71,7 @@
     const battleCorrectButton = document.getElementById("battle-correct-button");
     const battleWrongButton = document.getElementById("battle-wrong-button");
     const hasActiveGames = {{ active_games|yesno:"true,false" }};
-    let battlePollInterval = null;
+    let ws = null;
 
     const getCookie = (name) => {
         const cookiePrefix = `${name}=`;
@@ -121,22 +121,6 @@
         setBattleButtonsEnabled(true);
     };
 
-    const fetchBattleState = async () => {
-        const selectedGameId = getSelectedGameId();
-        if (!selectedGameId) {
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
-            return;
-        }
-
-        const response = await fetch(`/api/battle/state/?game_id=${selectedGameId}`);
-        if (!response.ok) {
-            throw new Error(`Request failed with status ${response.status} ${response.statusText}`);
-        }
-        const state = await response.json();
-        renderBattleState(state);
-    };
-
     const submitBattleAnswer = async (isCorrect) => {
         const selectedGameId = getSelectedGameId();
         if (!selectedGameId) {
@@ -170,22 +154,37 @@
         }
     };
 
-    const startBattlePolling = () => {
-        const handleBattleStateFetchError = (error) => {
-            battleStatusMessage.textContent = `Failed to load battle state: ${error.message}`;
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
-        };
-
-        if (battlePollInterval !== null) {
-            clearInterval(battlePollInterval);
+    const connectWebSocket = (gameId) => {
+        if (ws !== null) {
+            ws.close();
+            ws = null;
         }
 
-        fetchBattleState().catch(handleBattleStateFetchError);
+        if (!gameId) {
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+            return;
+        }
 
-        battlePollInterval = setInterval(() => {
-            fetchBattleState().catch(handleBattleStateFetchError);
-        }, 1000);
+        const WS_SCHEME = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(`${WS_SCHEME}://${location.host}/ws/game/${gameId}/`);
+
+        ws.addEventListener("message", (event) => {
+            const state = JSON.parse(event.data);
+            renderBattleState(state.battle);
+        });
+
+        ws.addEventListener("close", () => {
+            battleStatusMessage.textContent = "Connection closed. Reload to reconnect.";
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+        });
+
+        ws.addEventListener("error", () => {
+            battleStatusMessage.textContent = "Connection error.";
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+        });
     };
 
     startGameButton.addEventListener("click", async () => {
@@ -220,7 +219,6 @@
             }
 
             startGameMessage.textContent = "Game start request sent.";
-            fetchBattleState().catch(() => {});
         } catch (error) {
             startGameMessage.textContent = `Failed to start game: ${error.message}`;
         } finally {
@@ -229,10 +227,10 @@
     });
 
     activeGameSelect.addEventListener("change", () => {
-        startBattlePolling();
+        connectWebSocket(getSelectedGameId());
     });
     battleCorrectButton.addEventListener("click", () => submitBattleAnswer(true));
     battleWrongButton.addEventListener("click", () => submitBattleAnswer(false));
-    startBattlePolling();
+    connectWebSocket(getSelectedGameId());
 </script>
 {% endblock %}

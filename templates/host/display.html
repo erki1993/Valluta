@@ -217,22 +217,32 @@
         renderBattle(state.battle);
     };
 
-    const pollState = async () => {
-        try {
-            const response = await fetch("/api/game/state/");
-            if (!response.ok) {
-                throw new Error(`Status ${response.status}`);
-            }
-            const state = await response.json();
+    const GAME_ID = {{ game_id|default:"null" }};
+    const WS_SCHEME = location.protocol === "https:" ? "wss" : "ws";
+
+    if (GAME_ID) {
+        const ws = new WebSocket(`${WS_SCHEME}://${location.host}/ws/game/${GAME_ID}/`);
+
+        ws.addEventListener("message", (event) => {
+            const state = JSON.parse(event.data);
             renderState(state);
-        } catch (error) {
+        });
+
+        ws.addEventListener("close", () => {
+            battleBanner.hidden = false;
+            battleName.textContent = "Waiting for game state";
+            battleTimers.textContent = "Connection closed";
+        });
+
+        ws.addEventListener("error", () => {
             battleBanner.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection issue";
-        }
-    };
-
-    pollState();
-    setInterval(pollState, 1000);
+        });
+    } else {
+        battleBanner.hidden = false;
+        battleName.textContent = "Waiting for game state";
+        battleTimers.textContent = "No active game";
+    }
 </script>
 {% endblock %}

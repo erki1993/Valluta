@@ -27,7 +27,7 @@ class DisplayViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="game-grid"')
-        self.assertContains(response, "/api/game/state/")
+        self.assertContains(response, "ws/game/")
 
 
 class BattleApiTests(TestCase):

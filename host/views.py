@@ -1,5 +1,7 @@
 import json
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.db import models
 from django.http import HttpResponseBadRequest
 from django.http import JsonResponse
@@ -18,7 +20,9 @@ from game.services import (
 
 
 def display(request):
-    return render(request, 'host/display.html')
+    game = _get_display_game()
+    game_id = game.id if game else None
+    return render(request, 'host/display.html', {'game_id': game_id})
 
 
 def control(request):
@@ -116,6 +120,14 @@ def _serialize_game_state(game: Game | None) -> dict:
     if battle is not None:
         sync_battle_timer(battle)
         battle.refresh_from_db()
+        ensure_current_question(battle)
+        battle.refresh_from_db()
+        current_question = (
+            battle.battle_questions.filter(answered_correctly__isnull=True)
+            .select_related("question")
+            .order_by("order", "id")
+            .first()
+        )
         contested_square = battle.contested_square
         attacker_square = (
             Square.objects.filter(game=game, owner=battle.attacker)
@@ -135,12 +147,33 @@ def _serialize_game_state(game: Game | None) -> dict:
 
         battle_payload = {
             "active": battle.status == Battle.Status.ACTIVE,
+            "battle_id": battle.id,
+            "status": battle.status,
+            "winner_name": battle.winner.player.name if battle.winner_id else None,
+            "current_turn": battle.current_turn,
             "attacker_name": battle.attacker.player.name,
             "defender_name": battle.defender.player.name,
             "attacker_timer": _format_timer(battle.attacker_time_remaining_ms),
             "defender_timer": _format_timer(battle.defender_time_remaining_ms),
             "attacker_timer_ms": battle.attacker_time_remaining_ms,
             "defender_timer_ms": battle.defender_time_remaining_ms,
+            "attacker_score": battle.attacker_score,
+            "defender_score": battle.defender_score,
+            "attacker": {
+                "name": battle.attacker.player.name,
+                "time_remaining_ms": battle.attacker_time_remaining_ms,
+                "time_remaining": _format_timer(battle.attacker_time_remaining_ms),
+                "score": battle.attacker_score,
+                "is_current_turn": battle.current_turn == Battle.Turn.ATTACKER,
+            },
+            "defender": {
+                "name": battle.defender.player.name,
+                "time_remaining_ms": battle.defender_time_remaining_ms,
+                "time_remaining": _format_timer(battle.defender_time_remaining_ms),
+                "score": battle.defender_score,
+                "is_current_turn": battle.current_turn == Battle.Turn.DEFENDER,
+            },
+            "question_text": current_question.question.text if current_question else "",
             "highlight_squares": highlight_squares,
         }
 
@@ -170,6 +203,17 @@ def _get_payload(request):
         return None
 
 
+def broadcast_game_state(game_id: int) -> None:
+    """Broadcast full game state to the WebSocket group for the given game."""
+    channel_layer = get_channel_layer()
+    game = _get_display_game(game_id=game_id)
+    state = _serialize_game_state(game)
+    async_to_sync(channel_layer.group_send)(
+        f"game_{game_id}",
+        {"type": "game.state.update", "state": state},
+    )
+
+
 @require_POST
 def api_start_game(request):
     payload = _get_payload(request)
@@ -185,6 +229,7 @@ def api_start_game(request):
     except Game.DoesNotExist:
         return JsonResponse({"error": "Game not found."}, status=404)
 
+    broadcast_game_state(game_id)
     selected_player_name = (
         selected_game_player.player.name if selected_game_player is not None else None
     )
@@ -244,4 +289,5 @@ def api_battle_answer(request):
         return JsonResponse({"error": "No active battle found."}, status=404)
 
     updated_battle = answer_battle_question(battle, is_correct=is_correct)
+    broadcast_game_state(updated_battle.game_id)
     return JsonResponse(_serialize_battle_state(updated_battle))
