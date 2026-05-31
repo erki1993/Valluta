@@ -16,6 +16,7 @@ from game.services import (
     answer_battle_question,
     ensure_current_question,
     get_active_battle,
+    get_game_winner,
     start_game,
     sync_battle_timer,
 )
@@ -30,25 +31,6 @@ def display(request):
 def control(request):
     available_games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
     return render(request, "host/control.html", {"active_games": available_games})
-
-
-def _get_game_winner(
-    game_players: list[GamePlayer],
-    owner_counts: dict[int, int],
-) -> GamePlayer | None:
-    players_with_squares = [
-        game_player for game_player in game_players if owner_counts.get(game_player.id, 0) > 0
-    ]
-    if len(players_with_squares) == 1:
-        return players_with_squares[0]
-
-    non_eliminated_players = [
-        game_player for game_player in game_players if not game_player.is_eliminated
-    ]
-    if len(non_eliminated_players) == 1:
-        return non_eliminated_players[0]
-
-    return None
 
 
 def _create_lobby_game(player_configs: list[dict]) -> Game:
@@ -157,7 +139,7 @@ def _serialize_game_state(game: Game | None) -> dict:
         .values("owner_id")
         .annotate(count=models.Count("id"))
     }
-    winner = _get_game_winner(game_players, owner_counts)
+    winner = get_game_winner(game.id)
 
     squares = []
     for square in (
@@ -362,7 +344,7 @@ def api_new_game(request):
     if source_game is None:
         return JsonResponse({"error": "Game not found."}, status=404)
     if source_game.status != Game.Status.FINISHED:
-        return HttpResponseBadRequest("Only finished games can be reset.")
+        return HttpResponseBadRequest("Can only create a new game from a finished game.")
 
     source_game_players = list(
         source_game.game_players.select_related("player", "topic").order_by("id")

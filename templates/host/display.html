@@ -183,6 +183,7 @@
 <script>
     const GRID_SIZE = 5;
     const NEUTRAL_COLOR = "#555555";
+    const DEFAULT_WINNER_COLOR = "#ffe600";
     const tvLayout = document.getElementById("tv-layout");
     const gameGrid = document.getElementById("game-grid");
     const playersList = document.getElementById("players-list");
@@ -273,7 +274,7 @@
             return;
         }
 
-        const colors = [color || "#ffe600", "#ffffff", "#ffe600"];
+        const colors = [color || DEFAULT_WINNER_COLOR, "#ffffff"];
         window.confetti({ particleCount: 180, spread: 100, startVelocity: 45, colors });
         const burst = () => {
             window.confetti({
@@ -297,7 +298,7 @@
             return;
         }
 
-        const winnerColor = game.winner_color || "#ffe600";
+        const winnerColor = game.winner_color || DEFAULT_WINNER_COLOR;
         winnerCard.style.setProperty("--winner-color", winnerColor);
         winnerName.textContent = game.winner_name;
 

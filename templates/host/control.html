@@ -154,11 +154,11 @@
     };
 
     const hasAvailableGames = () => activeGameSelect.options.length > 0;
+    const getSelectedGameStatus = () => activeGameSelect.selectedOptions[0]?.dataset.status || null;
 
     const refreshStartGameAvailability = () => {
-        const selectedOption = activeGameSelect.selectedOptions[0];
-        const selectedGameFinished = selectedOption?.dataset.status === "finished";
-        startGameButton.disabled = !hasAvailableGames() || Boolean(selectedGameFinished);
+        const selectedGameFinished = getSelectedGameStatus() === "finished";
+        startGameButton.disabled = !hasAvailableGames() || selectedGameFinished;
         activeGameSelect.disabled = !hasAvailableGames();
         if (!hasAvailableGames()) {
             startGameMessage.textContent = "No active games available.";
