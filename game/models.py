@@ -6,6 +6,7 @@ hex_color_validator = RegexValidator(
     regex=r"^#[0-9A-Fa-f]{6}$",
     message="Color must be a valid hex value like #A1B2C3.",
 )
+DEFAULT_BATTLE_TIME_MS = 60000
 
 
 class Player(models.Model):
@@ -97,8 +98,8 @@ class Battle(models.Model):
         on_delete=models.CASCADE,
         related_name="battles",
     )
-    attacker_time_remaining_ms = models.IntegerField(default=60000)
-    defender_time_remaining_ms = models.IntegerField(default=60000)
+    attacker_time_remaining_ms = models.IntegerField(default=DEFAULT_BATTLE_TIME_MS)
+    defender_time_remaining_ms = models.IntegerField(default=DEFAULT_BATTLE_TIME_MS)
     current_turn = models.CharField(
         max_length=20,
         choices=Turn.choices,
