@@ -247,10 +247,11 @@ def api_create_game(request):
     if not topics:
         return HttpResponseBadRequest("No valid active topics selected.")
 
-    topics_with_questions = {
-        topic.id: topic
-        for topic in Topic.objects.filter(id__in=active_topic_ids, questions__isnull=False).distinct()
-    }
+    topics_with_questions = list(
+        Topic.objects.filter(id__in=active_topic_ids, questions__isnull=False)
+        .distinct()
+        .order_by("id")
+    )
     if len(topics_with_questions) != len(topics):
         return HttpResponseBadRequest("All selected topics must have at least one question.")
 
@@ -265,7 +266,7 @@ def api_create_game(request):
         game = Game.objects.create(status=Game.Status.LOBBY)
 
         game_players = []
-        available_topics = [topics_with_questions[topic.id] for topic in topics]
+        available_topics = topics_with_questions
         for index, player_payload in enumerate(players):
             player = Player.objects.create(
                 name=player_payload["name"],

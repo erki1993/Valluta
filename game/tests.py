@@ -133,9 +133,7 @@ class QuestionCsvImportAdminTests(TestCase):
         )
         user.set_password("admin-pass-123")
         user.save(update_fields=["password"])
-        self.client.force_login(
-            user
-        )
+        self.client.force_login(user)
 
     def test_import_csv_creates_topics_and_questions(self):
         csv_file = SimpleUploadedFile(
