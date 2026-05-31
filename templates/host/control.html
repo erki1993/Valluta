@@ -4,5 +4,61 @@
 
 {% block content %}
 <h1>Host Control Panel</h1>
-<p>Host panel — game controls will appear here.</p>
+<label for="active-game-select">Active game</label>
+<select id="active-game-select" {% if not active_games %}disabled{% endif %}>
+    {% for game in active_games %}
+    <option value="{{ game.id }}">Game {{ game.id }}</option>
+    {% endfor %}
+</select>
+
+<button id="start-game-button" {% if not active_games %}disabled{% endif %}>Start Game</button>
+<p id="start-game-message" aria-live="polite"></p>
+<script>
+    const activeGameSelect = document.getElementById("active-game-select");
+    const startGameButton = document.getElementById("start-game-button");
+    const startGameMessage = document.getElementById("start-game-message");
+    const hasActiveGames = {{ active_games|yesno:"true,false" }};
+    const getCookie = (name) => document.cookie
+        .split(";")
+        .map((cookie) => cookie.trim())
+        .find((cookie) => cookie.startsWith(`${name}=`))
+        ?.split("=")[1] ?? "";
+
+    if (!hasActiveGames) {
+        startGameMessage.textContent = "No active games available.";
+    }
+
+    startGameButton.addEventListener("click", async () => {
+        const selectedGameId = activeGameSelect.value;
+
+        if (!selectedGameId) {
+            startGameMessage.textContent = "Please select an active game.";
+            return;
+        }
+
+        startGameButton.disabled = true;
+        startGameMessage.textContent = "Starting game...";
+
+        try {
+            const response = await fetch("/api/game/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
+                },
+                body: JSON.stringify({ game_id: Number(selectedGameId) }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            startGameMessage.textContent = "Game start request sent.";
+        } catch (error) {
+            startGameMessage.textContent = `Failed to start game: ${error.message}`;
+        } finally {
+            startGameButton.disabled = !hasActiveGames;
+        }
+    });
+</script>
 {% endblock %}
