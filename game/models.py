@@ -1,4 +1,5 @@
 from django.core.validators import RegexValidator
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -59,8 +60,8 @@ class GamePlayer(models.Model):
 
 class Square(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="squares")
-    row = models.IntegerField()
-    col = models.IntegerField()
+    row = models.IntegerField(validators=[MinValueValidator(0)])
+    col = models.IntegerField(validators=[MinValueValidator(0)])
     owner = models.ForeignKey(
         GamePlayer,
         on_delete=models.SET_NULL,
@@ -98,15 +99,21 @@ class Battle(models.Model):
         on_delete=models.CASCADE,
         related_name="battles",
     )
-    attacker_time_remaining_ms = models.IntegerField(default=DEFAULT_BATTLE_TIME_MS)
-    defender_time_remaining_ms = models.IntegerField(default=DEFAULT_BATTLE_TIME_MS)
+    attacker_time_remaining_ms = models.IntegerField(
+        default=DEFAULT_BATTLE_TIME_MS,
+        validators=[MinValueValidator(0)],
+    )
+    defender_time_remaining_ms = models.IntegerField(
+        default=DEFAULT_BATTLE_TIME_MS,
+        validators=[MinValueValidator(0)],
+    )
     current_turn = models.CharField(
         max_length=20,
         choices=Turn.choices,
         default=Turn.ATTACKER,
     )
-    attacker_score = models.IntegerField(default=0)
-    defender_score = models.IntegerField(default=0)
+    attacker_score = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    defender_score = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     winner = models.ForeignKey(
         GamePlayer,
@@ -134,7 +141,7 @@ class BattleQuestion(models.Model):
     asked_to = models.CharField(max_length=20, choices=AskedTo.choices)
     answered_correctly = models.BooleanField(null=True, blank=True)
     time_taken_ms = models.IntegerField(null=True, blank=True)
-    order = models.IntegerField()
+    order = models.IntegerField(validators=[MinValueValidator(0)])
 
     def __str__(self):
         return f"Battle {self.battle_id} Q{self.order}"
