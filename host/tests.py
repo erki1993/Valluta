@@ -9,15 +9,20 @@ from game.models import Battle, BattleQuestion, Game, GamePlayer, Player, Questi
 
 
 class ControlViewTests(TestCase):
-    def test_control_view_shows_only_active_games(self):
+    def test_control_view_shows_non_finished_games_and_setup_section(self):
         active_game = Game.objects.create(status=Game.Status.ACTIVE)
         lobby_game = Game.objects.create(status=Game.Status.LOBBY)
+        finished_game = Game.objects.create(status=Game.Status.FINISHED)
 
         response = self.client.get(reverse("control:index"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'value="{active_game.id}"')
-        self.assertNotContains(response, f'value="{lobby_game.id}"')
+        self.assertContains(response, f'value="{lobby_game.id}"')
+        self.assertNotContains(response, f'value="{finished_game.id}"')
+        self.assertContains(response, "Game Setup")
+        self.assertContains(response, "/api/game/create/")
+        self.assertContains(response, "/api/topics/")
         self.assertContains(response, 'id="battle-section"')
 
 
@@ -206,3 +211,66 @@ class GameStateApiTests(TestCase):
         self.assertEqual(payload["battle"]["attacker_name"], "Alice")
         self.assertEqual(payload["battle"]["defender_name"], "Bob")
         self.assertGreaterEqual(len(payload["battle"]["highlight_squares"]), 1)
+
+
+class GameSetupApiTests(TestCase):
+    def setUp(self):
+        self.science = Topic.objects.create(name="Science")
+        self.history = Topic.objects.create(name="History")
+        Question.objects.create(topic=self.science, text="S1", answer="A1")
+        Question.objects.create(topic=self.science, text="S2", answer="A2")
+        Question.objects.create(topic=self.history, text="H1", answer="A3")
+
+    def test_topics_endpoint_returns_question_counts(self):
+        response = self.client.get("/api/topics/")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(
+            payload["topics"],
+            [
+                {"id": self.history.id, "name": "History", "question_count": 1},
+                {"id": self.science.id, "name": "Science", "question_count": 2},
+            ],
+        )
+
+    def test_create_game_endpoint_creates_game_players_and_grid(self):
+        response = self.client.post(
+            "/api/game/create/",
+            data=json.dumps(
+                {
+                    "active_topics": [self.science.id, self.history.id],
+                    "players": [
+                        {"name": "Alice", "color": "#FF5733"},
+                        {"name": "Bob", "color": "#33A1FF"},
+                        {"name": "Cara", "color": "#7D3C98"},
+                    ],
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.json()
+        game = Game.objects.get(id=payload["game_id"])
+        self.assertEqual(game.status, Game.Status.LOBBY)
+        self.assertEqual(game.game_players.count(), 3)
+        self.assertEqual(game.squares.count(), 25)
+        self.assertEqual(game.squares.filter(owner__isnull=False).count(), 3)
+
+    def test_create_game_rejects_more_than_twenty_five_players(self):
+        players = [
+            {"name": f"Player {idx + 1}", "color": "#FF5733"}
+            for idx in range(26)
+        ]
+        response = self.client.post(
+            "/api/game/create/",
+            data=json.dumps(
+                {
+                    "active_topics": [self.science.id],
+                    "players": players,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at most 25 players", response.content.decode())

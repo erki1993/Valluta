@@ -4,6 +4,31 @@
 
 {% block content %}
 <h1>Host Control Panel</h1>
+<section id="game-setup-section">
+    <h2>Game Setup</h2>
+    <p id="setup-status-message" aria-live="polite"></p>
+    <div>
+        <h3>Topics</h3>
+        <table id="topics-table">
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Question count</th>
+                </tr>
+            </thead>
+            <tbody id="topics-table-body"></tbody>
+        </table>
+        <label for="active-topics-select">Active topics for this game</label>
+        <select id="active-topics-select" multiple size="6"></select>
+    </div>
+    <div>
+        <label for="player-count-input">Number of players</label>
+        <input id="player-count-input" type="number" min="1" max="25" value="2">
+    </div>
+    <div id="players-config"></div>
+    <button id="create-game-button" type="button">Create Game</button>
+</section>
+
 <label for="active-game-select">Active game</label>
 <select id="active-game-select" {% if not active_games %}disabled{% endif %}>
     {% for game in active_games %}
@@ -52,8 +77,38 @@
         border-color: #1f6feb !important;
         background: #eef5ff;
     }
+    #game-setup-section {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        border: 1px solid #ccc;
+        border-radius: 0.25rem;
+    }
+    #topics-table {
+        margin-bottom: 0.5rem;
+    }
+    #topics-table th,
+    #topics-table td {
+        padding: 0.2rem 0.5rem;
+        text-align: left;
+    }
+    #players-config {
+        display: grid;
+        gap: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .player-config-row {
+        display: grid;
+        grid-template-columns: 1fr 8rem;
+        gap: 0.5rem;
+    }
 </style>
 <script>
+    const setupStatusMessage = document.getElementById("setup-status-message");
+    const topicsTableBody = document.getElementById("topics-table-body");
+    const activeTopicsSelect = document.getElementById("active-topics-select");
+    const playerCountInput = document.getElementById("player-count-input");
+    const playersConfig = document.getElementById("players-config");
+    const createGameButton = document.getElementById("create-game-button");
     const activeGameSelect = document.getElementById("active-game-select");
     const startGameButton = document.getElementById("start-game-button");
     const startGameMessage = document.getElementById("start-game-message");
@@ -70,8 +125,8 @@
     const battleQuestion = document.getElementById("battle-question");
     const battleCorrectButton = document.getElementById("battle-correct-button");
     const battleWrongButton = document.getElementById("battle-wrong-button");
-    const hasActiveGames = {{ active_games|yesno:"true,false" }};
     let ws = null;
+    const defaultColors = ["#FF5733", "#33A1FF", "#7D3C98", "#27AE60", "#f59e0b", "#14b8a6", "#ec4899", "#6366f1"];
 
     const getCookie = (name) => {
         const cookiePrefix = `${name}=`;
@@ -83,13 +138,91 @@
         return cookieEntry ? cookieEntry.slice(cookiePrefix.length) : "";
     };
 
-    if (!hasActiveGames) {
-        startGameMessage.textContent = "No active games available.";
-    }
+    const hasAvailableGames = () => activeGameSelect.options.length > 0;
+
+    const refreshStartGameAvailability = () => {
+        startGameButton.disabled = !hasAvailableGames();
+        activeGameSelect.disabled = !hasAvailableGames();
+        if (!hasAvailableGames()) {
+            startGameMessage.textContent = "No active games available.";
+        }
+    };
 
     const getSelectedGameId = () => {
         const selectedGameId = Number(activeGameSelect.value);
         return Number.isInteger(selectedGameId) && selectedGameId > 0 ? selectedGameId : null;
+    };
+
+    const buildPlayerInputs = (count) => {
+        playersConfig.innerHTML = "";
+        for (let i = 0; i < count; i += 1) {
+            const row = document.createElement("div");
+            row.className = "player-config-row";
+
+            const nameInput = document.createElement("input");
+            nameInput.type = "text";
+            nameInput.maxLength = 255;
+            nameInput.value = `Player ${i + 1}`;
+            nameInput.dataset.role = "name";
+
+            const colorInput = document.createElement("input");
+            colorInput.type = "color";
+            colorInput.value = defaultColors[i % defaultColors.length];
+            colorInput.dataset.role = "color";
+
+            row.appendChild(nameInput);
+            row.appendChild(colorInput);
+            playersConfig.appendChild(row);
+        }
+    };
+
+    const gatherPlayers = () =>
+        Array.from(playersConfig.querySelectorAll(".player-config-row")).map((row, index) => {
+            const enteredName = (row.querySelector('[data-role="name"]').value || "").trim();
+            return {
+                name: enteredName || `Player ${index + 1}`,
+                color: row.querySelector('[data-role="color"]').value || defaultColors[index % defaultColors.length],
+            };
+        });
+
+    const selectedTopics = () =>
+        Array.from(activeTopicsSelect.selectedOptions).map((option) => Number(option.value));
+
+    const loadTopics = async () => {
+        const response = await fetch("/api/topics/");
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        const topics = payload.topics || [];
+
+        topicsTableBody.innerHTML = "";
+        activeTopicsSelect.innerHTML = "";
+        topics.forEach((topic) => {
+            const row = document.createElement("tr");
+            const topicCell = document.createElement("td");
+            topicCell.textContent = topic.name;
+            const countCell = document.createElement("td");
+            countCell.textContent = String(topic.question_count);
+            row.appendChild(topicCell);
+            row.appendChild(countCell);
+            topicsTableBody.appendChild(row);
+
+            const option = document.createElement("option");
+            option.value = topic.id;
+            option.textContent = `${topic.name} - ${topic.question_count}`;
+            option.selected = true;
+            activeTopicsSelect.appendChild(option);
+        });
+    };
+
+    const addGameOption = (gameId) => {
+        const option = document.createElement("option");
+        option.value = String(gameId);
+        option.textContent = `Game ${gameId}`;
+        activeGameSelect.prepend(option);
+        activeGameSelect.value = String(gameId);
+        refreshStartGameAvailability();
     };
 
     const setBattleButtonsEnabled = (enabled) => {
@@ -187,8 +320,53 @@
         });
     };
 
+    createGameButton.addEventListener("click", async () => {
+        const topicIds = selectedTopics();
+        if (!topicIds.length) {
+            setupStatusMessage.textContent = "Select at least one active topic.";
+            return;
+        }
+
+        createGameButton.disabled = true;
+        setupStatusMessage.textContent = "Creating game...";
+        try {
+            const response = await fetch("/api/game/create/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
+                },
+                body: JSON.stringify({
+                    active_topics: topicIds,
+                    players: gatherPlayers(),
+                }),
+            });
+
+            if (!response.ok) {
+                const errorDetails = await response.text();
+                throw new Error(errorDetails || `HTTP ${response.status}`);
+            }
+
+            const payload = await response.json();
+            addGameOption(payload.game_id);
+            setupStatusMessage.textContent = `Game ${payload.game_id} created.`;
+            startGameMessage.textContent = "";
+            connectWebSocket(getSelectedGameId());
+        } catch (error) {
+            setupStatusMessage.textContent = `Failed to create game: ${error.message}`;
+        } finally {
+            createGameButton.disabled = false;
+        }
+    });
+
+    playerCountInput.addEventListener("change", () => {
+        const count = Math.max(1, Math.min(25, Number(playerCountInput.value) || 2));
+        playerCountInput.value = String(count);
+        buildPlayerInputs(count);
+    });
+
     startGameButton.addEventListener("click", async () => {
-        if (!hasActiveGames) {
+        if (!hasAvailableGames()) {
             startGameMessage.textContent = "No active games available.";
             return;
         }
@@ -222,7 +400,7 @@
         } catch (error) {
             startGameMessage.textContent = `Failed to start game: ${error.message}`;
         } finally {
-            startGameButton.disabled = !hasActiveGames;
+            startGameButton.disabled = !hasAvailableGames();
         }
     });
 
@@ -231,6 +409,11 @@
     });
     battleCorrectButton.addEventListener("click", () => submitBattleAnswer(true));
     battleWrongButton.addEventListener("click", () => submitBattleAnswer(false));
+    buildPlayerInputs(Number(playerCountInput.value));
+    loadTopics().catch((error) => {
+        setupStatusMessage.textContent = `Failed to load topics: ${error.message}`;
+    });
+    refreshStartGameAvailability();
     connectWebSocket(getSelectedGameId());
 </script>
 {% endblock %}

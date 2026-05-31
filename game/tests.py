@@ -1,9 +1,13 @@
 from io import StringIO
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.urls import reverse
 
+from game.admin import QuestionAdmin, QuestionInline, TopicAdmin
 from game.models import Game, GamePlayer, Player, Question, Square, Topic
 from game.services import start_game
 
@@ -106,3 +110,62 @@ class SeedDemoCommandTests(TestCase):
             ["Science", "History", "Sports", "Science"],
         )
         self.assertIn(f"Seeded demo game {game.pk}", stdout.getvalue())
+
+
+class AdminConfigurationTests(TestCase):
+    def test_topic_admin_lists_question_count_and_inline_questions(self):
+        self.assertIn("question_count", TopicAdmin.list_display)
+        self.assertIn(QuestionInline, TopicAdmin.inlines)
+
+    def test_question_admin_enables_topic_filter_and_search(self):
+        self.assertIn("topic_name", QuestionAdmin.list_display)
+        self.assertEqual(QuestionAdmin.list_filter, ("topic",))
+        self.assertEqual(QuestionAdmin.search_fields, ("text", "answer"))
+
+
+class QuestionCsvImportAdminTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create(
+            username="admin",
+            email="admin@example.com",
+            is_staff=True,
+            is_superuser=True,
+        )
+        user.set_password("admin-pass-123")
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+
+    def test_import_csv_creates_topics_and_questions(self):
+        csv_file = SimpleUploadedFile(
+            "questions.csv",
+            b"topic,question,answer\nScience,What is H2O?,Water\nHistory,First president?,Washington\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            reverse("admin:game_question_import_csv"),
+            {"csv_file": csv_file},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Topic.objects.filter(name="Science").count(), 1)
+        self.assertEqual(Topic.objects.filter(name="History").count(), 1)
+        self.assertEqual(Question.objects.count(), 2)
+
+    def test_import_csv_rejects_missing_required_columns(self):
+        csv_file = SimpleUploadedFile(
+            "bad.csv",
+            b"topic,question\nScience,What is H2O?\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            reverse("admin:game_question_import_csv"),
+            {"csv_file": csv_file},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Missing CSV columns: answer.")
+        self.assertEqual(Question.objects.count(), 0)
