@@ -3,7 +3,7 @@ import random
 from game.models import Game, GamePlayer
 
 
-def start_game(game_id):
+def start_game(game_id: int) -> GamePlayer | None:
     """
     Activate the game and return a random active GamePlayer.
 
