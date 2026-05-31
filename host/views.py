@@ -26,6 +26,7 @@ def control(request):
 
 
 def _format_timer(milliseconds: int) -> str:
+    """Format millisecond duration into MM:SS display text."""
     total_seconds = max(0, milliseconds // 1000)
     minutes = total_seconds // 60
     seconds = total_seconds % 60
@@ -70,6 +71,7 @@ def _serialize_battle_state(battle: Battle | None) -> dict:
 
 
 def _get_payload(request):
+    """Parse request JSON body and return dict, or None when invalid JSON."""
     try:
         return json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:

@@ -62,7 +62,7 @@ class BattleApiTests(TestCase):
             defender=self.defender,
             contested_square=self.contested_square,
             current_turn=Battle.Turn.ATTACKER,
-            turn_started_at=timezone.now(),
+            turn_started_at=timezone.now() + timedelta(seconds=1),
         )
         self.question_a = Question.objects.create(
             topic=self.topic_a,

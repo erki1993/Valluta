@@ -50,7 +50,7 @@ def sync_battle_timer(battle: Battle, now=None) -> Battle:
         return battle
 
     now = now or timezone.now()
-    elapsed_ms = int(max(0, (now - battle.turn_started_at).total_seconds() * 1000))
+    elapsed_ms = int((now - battle.turn_started_at).total_seconds() * 1000)
     if elapsed_ms <= 0:
         return battle
 
@@ -137,6 +137,7 @@ def answer_battle_question(battle: Battle, is_correct: bool) -> Battle:
         return battle
 
     now = timezone.now()
+    elapsed_turn_ms = max(0, int((now - battle.turn_started_at).total_seconds() * 1000))
     sync_battle_timer(battle, now=now)
     battle.refresh_from_db()
     if battle.status != Battle.Status.ACTIVE:
@@ -145,7 +146,7 @@ def answer_battle_question(battle: Battle, is_correct: bool) -> Battle:
     current_question = ensure_current_question(battle)
     if current_question is not None:
         current_question.answered_correctly = is_correct
-        current_question.time_taken_ms = 0
+        current_question.time_taken_ms = elapsed_turn_ms
         current_question.save(update_fields=["answered_correctly", "time_taken_ms"])
 
     update_fields = ["current_turn", "turn_started_at"]

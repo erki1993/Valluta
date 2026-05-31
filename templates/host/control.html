@@ -88,7 +88,7 @@
     }
 
     const getSelectedGameId = () => {
-        const selectedGameId = Number.parseInt(activeGameSelect.value, 10);
+        const selectedGameId = Number(activeGameSelect.value);
         return Number.isInteger(selectedGameId) && selectedGameId > 0 ? selectedGameId : null;
     };
 
@@ -171,22 +171,20 @@
     };
 
     const startBattlePolling = () => {
+        const handleBattleStateFetchError = (error) => {
+            battleStatusMessage.textContent = `Failed to load battle state: ${error.message}`;
+            battleSection.hidden = true;
+            setBattleButtonsEnabled(false);
+        };
+
         if (battlePollInterval !== null) {
             clearInterval(battlePollInterval);
         }
 
-        fetchBattleState().catch((error) => {
-            battleStatusMessage.textContent = `Failed to load battle state: ${error.message}`;
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
-        });
+        fetchBattleState().catch(handleBattleStateFetchError);
 
         battlePollInterval = setInterval(() => {
-            fetchBattleState().catch((error) => {
-                battleStatusMessage.textContent = `Failed to load battle state: ${error.message}`;
-                battleSection.hidden = true;
-                setBattleButtonsEnabled(false);
-            });
+            fetchBattleState().catch(handleBattleStateFetchError);
         }, 1000);
     };
 
