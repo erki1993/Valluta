@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from game.models import Game
 
 
 def display(request):
@@ -6,4 +7,5 @@ def display(request):
 
 
 def control(request):
-    return render(request, 'host/control.html')
+    active_games = Game.objects.filter(status=Game.Status.ACTIVE).order_by("-created_at")
+    return render(request, "host/control.html", {"active_games": active_games})
