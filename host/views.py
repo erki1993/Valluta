@@ -17,6 +17,7 @@ from game.services import (
     ensure_current_question,
     get_active_battle,
     get_game_winner,
+    start_battle,
     start_game,
     sync_battle_timer,
 )
@@ -29,8 +30,8 @@ def display(request):
 
 
 def control(request):
-    available_games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
-    return render(request, "host/control.html", {"active_games": available_games})
+    games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
+    return render(request, "host/control.html", {"games": games})
 
 
 def _create_lobby_game(player_configs: list[dict]) -> Game:
@@ -430,6 +431,34 @@ def api_game_state(request):
 
     game = _get_display_game(game_id=game_id)
     return JsonResponse(_serialize_game_state(game))
+
+
+@require_POST
+def api_start_battle(request):
+    payload = _get_payload(request)
+    if payload is None:
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    game_id = payload.get("game_id")
+    attacker_id = payload.get("attacker_id")
+    defender_id = payload.get("defender_id")
+
+    if not isinstance(game_id, int) or game_id <= 0:
+        return HttpResponseBadRequest("game_id must be a positive integer.")
+    if not isinstance(attacker_id, int) or attacker_id <= 0:
+        return HttpResponseBadRequest("attacker_id must be a positive integer.")
+    if not isinstance(defender_id, int) or defender_id <= 0:
+        return HttpResponseBadRequest("defender_id must be a positive integer.")
+
+    try:
+        battle = start_battle(game_id, attacker_id, defender_id)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    except (Game.DoesNotExist, GamePlayer.DoesNotExist):
+        return JsonResponse({"error": "Game or player not found."}, status=404)
+
+    broadcast_game_state(game_id)
+    return JsonResponse(_serialize_battle_state(battle))
 
 
 @require_POST

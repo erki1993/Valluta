@@ -83,6 +83,35 @@ def start_game(game_id: int) -> GamePlayer | None:
     return random.choice(active_game_players)
 
 
+def start_battle(game_id: int, attacker_id: int, defender_id: int) -> Battle:
+    game = Game.objects.get(pk=game_id)
+    if game.status != Game.Status.ACTIVE:
+        raise ValueError("Game is not active.")
+    if get_active_battle(game_id=game_id) is not None:
+        raise ValueError("A battle is already in progress.")
+
+    attacker = GamePlayer.objects.get(pk=attacker_id, game=game, is_eliminated=False)
+    defender = GamePlayer.objects.get(pk=defender_id, game=game, is_eliminated=False)
+    if attacker.pk == defender.pk:
+        raise ValueError("Attacker and defender must be different players.")
+
+    contested_square = (
+        Square.objects.filter(game=game, owner__isnull=True).order_by("?").first()
+        or Square.objects.filter(game=game, owner=defender).order_by("?").first()
+    )
+    if contested_square is None:
+        raise ValueError("No available square to contest.")
+
+    battle = Battle.objects.create(
+        game=game,
+        attacker=attacker,
+        defender=defender,
+        contested_square=contested_square,
+    )
+    ensure_current_question(battle)
+    return battle
+
+
 def get_active_battle(game_id: int | None = None) -> Battle | None:
     queryset = Battle.objects.filter(status=Battle.Status.ACTIVE).select_related(
         "attacker__player",

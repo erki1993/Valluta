@@ -9,5 +9,6 @@ urlpatterns = [
     path("game/", views.api_start_game, name="api-game-start"),
     path("game/state/", views.api_game_state, name="api-game-state"),
     path("battle/state/", views.api_battle_state, name="api-battle-state"),
+    path("battle/start/", views.api_start_battle, name="api-battle-start"),
     path("battle/answer/", views.api_battle_answer, name="api-battle-answer"),
 ]

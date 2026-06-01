@@ -1,505 +1,532 @@
 {% extends "base.html" %}
 
-{% block title %}Valluta – Host Control{% endblock %}
+{% block title %}Valluta – Control{% endblock %}
 
 {% block content %}
-<h1>Host Control Panel</h1>
-<section id="game-setup-section">
-    <h2>Game Setup</h2>
-    <p id="setup-status-message" aria-live="polite"></p>
-    <div>
-        <h3>Topics</h3>
-        <table id="topics-table">
-            <thead>
-                <tr>
-                    <th>Topic</th>
-                    <th>Question count</th>
-                </tr>
-            </thead>
-            <tbody id="topics-table-body"></tbody>
-        </table>
-        <label for="active-topics-select">Active topics for this game</label>
-        <select id="active-topics-select" multiple size="6"></select>
-    </div>
-    <div>
-        <label for="player-count-input">Number of players</label>
-        <input id="player-count-input" type="number" min="1" max="25" value="2">
-    </div>
-    <div id="players-config"></div>
-    <button id="create-game-button" type="button">Create Game</button>
-</section>
-
-<label for="active-game-select">Active game</label>
-<select id="active-game-select" {% if not active_games %}disabled{% endif %}>
-    {% for game in active_games %}
-    <option value="{{ game.id }}">Game {{ game.id }}</option>
-    {% endfor %}
-</select>
-
-<button id="start-game-button" aria-describedby="start-game-message" {% if not active_games %}disabled{% endif %}>Start Game</button>
-<p id="start-game-message" aria-live="polite"></p>
-<section id="finished-game-section" hidden>
-    <h2>Game finished</h2>
-    <p>Winner: <strong id="winner-name">-</strong></p>
-    <button id="new-game-button" type="button">New Game</button>
-</section>
-<section id="battle-section" hidden>
-    <h2>Active battle</h2>
-    <p id="battle-status-message" aria-live="polite"></p>
-    <div id="battle-players">
-        <div id="attacker-card">
-            <h3>Attacker</h3>
-            <p><strong id="attacker-name">-</strong></p>
-            <p>Time: <span id="attacker-time">00:00</span></p>
-            <p>Score: <span id="attacker-score">0</span></p>
-        </div>
-        <div id="defender-card">
-            <h3>Defender</h3>
-            <p><strong id="defender-name">-</strong></p>
-            <p>Time: <span id="defender-time">00:00</span></p>
-            <p>Score: <span id="defender-score">0</span></p>
-        </div>
-    </div>
-    <p>Question: <span id="battle-question">-</span></p>
-    <div>
-        <button id="battle-correct-button" type="button">Correct ✓</button>
-        <button id="battle-wrong-button" type="button">Wrong ✗</button>
-    </div>
-</section>
 <style>
-    #battle-players {
+    [hidden] { display: none !important; }
+
+    #control-root {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        align-items: start;
+    }
+    @media (max-width: 640px) {
+        #control-root { grid-template-columns: 1fr; }
+    }
+
+    #game-header {
         display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+    }
+    #game-select { flex: 1; min-width: 8rem; font-size: 1rem; padding: 0.3rem; }
+
+    .status-badge {
+        padding: 0.2rem 0.6rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+    }
+    .status-badge.lobby    { background: #e2e8f0; color: #475569; }
+    .status-badge.active   { background: #dcfce7; color: #166534; }
+    .status-badge.finished { background: #fee2e2; color: #991b1b; }
+
+    #start-game-btn {
+        padding: 0.35rem 0.9rem;
+        background: #166534;
+        color: #fff;
+        border: none;
+        border-radius: 0.35rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+    #start-game-btn:disabled { background: #86efac; cursor: default; }
+
+    #players-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+        gap: 0.6rem;
+        margin: 0.75rem 0;
+    }
+
+    .player-card {
+        position: relative;
+        border: 2px solid var(--player-color, #ccc);
+        border-radius: 0.5rem;
+        padding: 0.55rem 0.7rem;
+        cursor: pointer;
+        user-select: none;
+        background: #fff;
+        transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .player-card:hover:not(.eliminated) {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .player-card.eliminated { opacity: 0.4; cursor: default; }
+    .player-card.attacker   { background: #fff7ed; box-shadow: 0 0 0 3px #f97316; }
+    .player-card.defender   { background: #eff6ff; box-shadow: 0 0 0 3px #3b82f6; }
+    .player-card .card-name  { font-weight: bold; color: var(--player-color, inherit); font-size: 1rem; }
+    .player-card .card-score { font-size: 0.8rem; color: #64748b; margin-top: 0.15rem; }
+    .card-role-tag {
+        position: absolute;
+        top: -0.55rem;
+        right: 0.4rem;
+        font-size: 0.65rem;
+        font-weight: bold;
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.2rem;
+        line-height: 1.5;
+    }
+    .attacker .card-role-tag { background: #f97316; color: #fff; }
+    .defender .card-role-tag { background: #3b82f6; color: #fff; }
+
+    #battle-setup {
+        margin-top: 0.75rem;
+        padding: 0.75rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        background: #f8fafc;
+    }
+    #battle-setup h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+    #vs-line { font-size: 0.95rem; color: #334155; margin: 0 0 0.6rem; }
+    #start-battle-btn {
+        padding: 0.45rem 1.2rem;
+        background: #1d4ed8;
+        color: #fff;
+        border: none;
+        border-radius: 0.4rem;
+        cursor: pointer;
+        font-size: 0.95rem;
+    }
+    #start-battle-btn:disabled { background: #93c5fd; cursor: default; }
+
+    #finished-panel {
+        grid-column: 1 / -1;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        background: #fefce8;
+        border: 1px solid #fde047;
+        display: flex;
+        align-items: center;
         gap: 1rem;
-        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
     }
-    #battle-players > div {
-        border: 1px solid #ccc;
-        border-radius: 0.25rem;
-        padding: 0.5rem;
-        min-width: 12rem;
+    #finished-panel p { margin: 0; }
+    #new-game-btn {
+        padding: 0.35rem 0.9rem;
+        background: #92400e;
+        color: #fff;
+        border: none;
+        border-radius: 0.35rem;
+        cursor: pointer;
     }
-    .turn-active {
-        border-color: #1f6feb !important;
-        background: #eef5ff;
-    }
-    #game-setup-section {
-        margin-bottom: 1rem;
-        padding: 0.75rem;
-        border: 1px solid #ccc;
-        border-radius: 0.25rem;
-    }
-    #topics-table {
-        margin-bottom: 0.5rem;
-    }
-    #topics-table th,
-    #topics-table td {
-        padding: 0.2rem 0.5rem;
-        text-align: left;
-    }
-    #players-config {
+    #new-game-btn:disabled { background: #d97706; cursor: default; }
+
+    /* Battle panel */
+    #battle-panel { border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; background: #fff; }
+    #battle-panel h2 { margin: 0 0 0.75rem; }
+
+    #battle-cards {
         display: grid;
-        gap: 0.5rem;
-        margin: 0.5rem 0;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
     }
-    #finished-game-section {
-        margin: 1rem 0;
-        padding: 0.75rem;
-        border: 1px solid #ccc;
-        border-radius: 0.25rem;
-        background: #f6f8fa;
+    .battle-card {
+        border: 2px solid #e2e8f0;
+        border-radius: 0.5rem;
+        padding: 0.6rem 0.75rem;
+        background: #f8fafc;
     }
-    .player-config-row {
-        display: grid;
-        grid-template-columns: 1fr 8rem;
-        gap: 0.5rem;
+    .battle-card.turn-active { border-color: #1d4ed8; background: #eff6ff; }
+    .battle-card .card-role  { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .battle-card .card-name  { font-size: 1rem; font-weight: bold; margin: 0.2rem 0; }
+    .battle-card .card-timer { font-size: 1.3rem; font-family: monospace; }
+    .battle-card .card-score { font-size: 0.8rem; color: #475569; margin-top: 0.2rem; }
+
+    #battle-question-box {
+        padding: 0.6rem 0.75rem;
+        background: #f1f5f9;
+        border-radius: 0.4rem;
+        margin-bottom: 0.75rem;
+        font-size: 1rem;
+        min-height: 2.2rem;
     }
+
+    #answer-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    #answer-buttons button {
+        padding: 0.65rem;
+        font-size: 1.05rem;
+        font-weight: bold;
+        border: none;
+        border-radius: 0.45rem;
+        cursor: pointer;
+    }
+    #correct-btn          { background: #16a34a; color: #fff; }
+    #correct-btn:disabled { background: #86efac; cursor: default; }
+    #wrong-btn            { background: #dc2626; color: #fff; }
+    #wrong-btn:disabled   { background: #fca5a5; cursor: default; }
+
+    .msg { font-size: 0.85rem; color: #64748b; margin: 0.4rem 0 0; min-height: 1.1em; }
+    .msg.error { color: #dc2626; }
 </style>
+
+<div id="control-root">
+
+    <section id="left-panel">
+        <div id="game-header">
+            <select id="game-select">
+                {% for game in games %}
+                <option value="{{ game.id }}" data-status="{{ game.status }}">Game {{ game.id }}</option>
+                {% empty %}
+                <option disabled selected>No games — create one in Admin</option>
+                {% endfor %}
+            </select>
+            <span id="status-badge" class="status-badge"></span>
+            <button id="start-game-btn" type="button" hidden>Start Game</button>
+        </div>
+        <p id="game-msg" class="msg" aria-live="polite"></p>
+
+        <div id="players-panel" hidden>
+            <p id="select-hint" class="msg">Select attacker, then defender.</p>
+            <div id="players-grid"></div>
+            <div id="battle-setup" hidden>
+                <h3>Start Battle</h3>
+                <p id="vs-line">—</p>
+                <button id="start-battle-btn" type="button">Start Battle</button>
+                <p id="battle-start-msg" class="msg" aria-live="polite"></p>
+            </div>
+        </div>
+    </section>
+
+    <section id="battle-panel" hidden>
+        <h2>Battle</h2>
+        <div id="battle-cards">
+            <div id="attacker-card" class="battle-card">
+                <div class="card-role">⚔ Attacker</div>
+                <div class="card-name" id="attacker-name">—</div>
+                <div class="card-timer" id="attacker-time">01:00</div>
+                <div class="card-score">Score: <span id="attacker-score">0</span></div>
+            </div>
+            <div id="defender-card" class="battle-card">
+                <div class="card-role">🛡 Defender</div>
+                <div class="card-name" id="defender-name">—</div>
+                <div class="card-timer" id="defender-time">01:00</div>
+                <div class="card-score">Score: <span id="defender-score">0</span></div>
+            </div>
+        </div>
+        <div id="battle-question-box" aria-live="polite">—</div>
+        <div id="answer-buttons">
+            <button id="correct-btn" type="button" disabled>✓ Correct</button>
+            <button id="wrong-btn" type="button" disabled>✗ Wrong</button>
+        </div>
+        <p id="battle-msg" class="msg" aria-live="polite"></p>
+    </section>
+
+    <section id="finished-panel" hidden>
+        <p>🏆 Winner: <strong id="winner-name">—</strong></p>
+        <button id="new-game-btn" type="button">New Game</button>
+        <p id="new-game-msg" class="msg" aria-live="polite"></p>
+    </section>
+
+</div>
+
 <script>
-    const setupStatusMessage = document.getElementById("setup-status-message");
-    const topicsTableBody = document.getElementById("topics-table-body");
-    const activeTopicsSelect = document.getElementById("active-topics-select");
-    const playerCountInput = document.getElementById("player-count-input");
-    const playersConfig = document.getElementById("players-config");
-    const createGameButton = document.getElementById("create-game-button");
-    const activeGameSelect = document.getElementById("active-game-select");
-    const startGameButton = document.getElementById("start-game-button");
-    const startGameMessage = document.getElementById("start-game-message");
-    const finishedGameSection = document.getElementById("finished-game-section");
-    const winnerName = document.getElementById("winner-name");
-    const newGameButton = document.getElementById("new-game-button");
-    const battleSection = document.getElementById("battle-section");
-    const battleStatusMessage = document.getElementById("battle-status-message");
-    const attackerCard = document.getElementById("attacker-card");
-    const defenderCard = document.getElementById("defender-card");
-    const attackerName = document.getElementById("attacker-name");
-    const defenderName = document.getElementById("defender-name");
-    const attackerTime = document.getElementById("attacker-time");
-    const defenderTime = document.getElementById("defender-time");
-    const attackerScore = document.getElementById("attacker-score");
-    const defenderScore = document.getElementById("defender-score");
-    const battleQuestion = document.getElementById("battle-question");
-    const battleCorrectButton = document.getElementById("battle-correct-button");
-    const battleWrongButton = document.getElementById("battle-wrong-button");
+    const gameSelect      = document.getElementById("game-select");
+    const statusBadge     = document.getElementById("status-badge");
+    const startGameBtn    = document.getElementById("start-game-btn");
+    const gameMsg         = document.getElementById("game-msg");
+    const playersPanel    = document.getElementById("players-panel");
+    const playersGrid     = document.getElementById("players-grid");
+    const battleSetup     = document.getElementById("battle-setup");
+    const vsLine          = document.getElementById("vs-line");
+    const startBattleBtn  = document.getElementById("start-battle-btn");
+    const battleStartMsg  = document.getElementById("battle-start-msg");
+    const battlePanel     = document.getElementById("battle-panel");
+    const attackerCard    = document.getElementById("attacker-card");
+    const defenderCard    = document.getElementById("defender-card");
+    const attackerName    = document.getElementById("attacker-name");
+    const defenderName    = document.getElementById("defender-name");
+    const attackerTime    = document.getElementById("attacker-time");
+    const defenderTime    = document.getElementById("defender-time");
+    const attackerScore   = document.getElementById("attacker-score");
+    const defenderScore   = document.getElementById("defender-score");
+    const battleQuestionBox = document.getElementById("battle-question-box");
+    const correctBtn      = document.getElementById("correct-btn");
+    const wrongBtn        = document.getElementById("wrong-btn");
+    const battleMsg       = document.getElementById("battle-msg");
+    const finishedPanel   = document.getElementById("finished-panel");
+    const winnerName      = document.getElementById("winner-name");
+    const newGameBtn      = document.getElementById("new-game-btn");
+    const newGameMsg      = document.getElementById("new-game-msg");
+
     let ws = null;
-    const defaultColors = ["#FF5733", "#33A1FF", "#7D3C98", "#27AE60", "#f59e0b", "#14b8a6", "#ec4899", "#6366f1"];
+    let selectedAttackerId = null;
+    let selectedDefenderId = null;
+    let playersData = [];
 
     const getCookie = (name) => {
-        const cookiePrefix = `${name}=`;
-        const cookieEntry = document.cookie
-            .split(";")
-            .map((cookie) => cookie.trim())
-            .find((cookie) => cookie.startsWith(cookiePrefix));
-
-        return cookieEntry ? cookieEntry.slice(cookiePrefix.length) : "";
+        const prefix = `${name}=`;
+        const entry = document.cookie.split(";").map(c => c.trim()).find(c => c.startsWith(prefix));
+        return entry ? entry.slice(prefix.length) : "";
     };
 
-    const hasAvailableGames = () => activeGameSelect.options.length > 0;
-    const getSelectedGameStatus = () => activeGameSelect.selectedOptions[0]?.dataset.status || null;
-
-    const refreshStartGameAvailability = () => {
-        const selectedGameFinished = getSelectedGameStatus() === "finished";
-        startGameButton.disabled = !hasAvailableGames() || selectedGameFinished;
-        activeGameSelect.disabled = !hasAvailableGames();
-        if (!hasAvailableGames()) {
-            startGameMessage.textContent = "No active games available.";
-        } else if (selectedGameFinished) {
-            startGameMessage.textContent = "Selected game has finished.";
+    const postJson = async (url, body) => {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
+            },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `HTTP ${res.status}`);
         }
+        return res.json();
     };
 
     const getSelectedGameId = () => {
-        const selectedGameId = Number(activeGameSelect.value);
-        return Number.isInteger(selectedGameId) && selectedGameId > 0 ? selectedGameId : null;
+        const val = Number(gameSelect.value);
+        return Number.isInteger(val) && val > 0 ? val : null;
     };
 
-    const buildPlayerInputs = (count) => {
-        playersConfig.innerHTML = "";
-        for (let i = 0; i < count; i += 1) {
-            const row = document.createElement("div");
-            row.className = "player-config-row";
+    const getSelectedGameStatus = () => gameSelect.selectedOptions[0]?.dataset.status ?? null;
 
-            const nameInput = document.createElement("input");
-            nameInput.type = "text";
-            nameInput.maxLength = 255;
-            nameInput.value = `Player ${i + 1}`;
-            nameInput.dataset.role = "name";
-
-            const colorInput = document.createElement("input");
-            colorInput.type = "color";
-            colorInput.value = defaultColors[i % defaultColors.length];
-            colorInput.dataset.role = "color";
-
-            row.appendChild(nameInput);
-            row.appendChild(colorInput);
-            playersConfig.appendChild(row);
-        }
+    const updateStatusBadge = (status) => {
+        statusBadge.textContent = status ?? "";
+        statusBadge.className = `status-badge ${status ?? ""}`;
     };
 
-    const gatherPlayers = () =>
-        Array.from(playersConfig.querySelectorAll(".player-config-row")).map((row, index) => {
-            const enteredName = (row.querySelector('[data-role="name"]').value || "").trim();
-            return {
-                name: enteredName || `Player ${index + 1}`,
-                color: row.querySelector('[data-role="color"]').value || defaultColors[index % defaultColors.length],
-            };
+    // --- Player selection ---
+
+    const renderPlayerCards = () => {
+        playersGrid.querySelectorAll(".player-card").forEach(card => {
+            const id = Number(card.dataset.gamePlayerId);
+            card.classList.toggle("attacker", id === selectedAttackerId);
+            card.classList.toggle("defender", id === selectedDefenderId);
+
+            let tag = card.querySelector(".card-role-tag");
+            if (!tag) {
+                tag = document.createElement("span");
+                tag.className = "card-role-tag";
+                card.appendChild(tag);
+            }
+            if (id === selectedAttackerId)      { tag.textContent = "ATK"; tag.hidden = false; }
+            else if (id === selectedDefenderId) { tag.textContent = "DEF"; tag.hidden = false; }
+            else                                { tag.hidden = true; }
         });
 
-    const selectedTopics = () =>
-        Array.from(activeTopicsSelect.selectedOptions).map((option) => Number(option.value));
-
-    const loadTopics = async () => {
-        const response = await fetch("/api/topics/");
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        const bothSelected = selectedAttackerId !== null && selectedDefenderId !== null;
+        battleSetup.hidden = !bothSelected;
+        if (bothSelected) {
+            const atk = playersData.find(p => p.game_player_id === selectedAttackerId);
+            const def = playersData.find(p => p.game_player_id === selectedDefenderId);
+            vsLine.textContent = `${atk?.name ?? "?"} ⚔ ${def?.name ?? "?"}`;
         }
-        const payload = await response.json();
-        const topics = payload.topics || [];
+    };
 
-        topicsTableBody.innerHTML = "";
-        activeTopicsSelect.innerHTML = "";
-        topics.forEach((topic) => {
-            const row = document.createElement("tr");
-            const topicCell = document.createElement("td");
-            topicCell.textContent = topic.name;
-            const countCell = document.createElement("td");
-            countCell.textContent = String(topic.question_count);
-            row.appendChild(topicCell);
-            row.appendChild(countCell);
-            topicsTableBody.appendChild(row);
-
-            const option = document.createElement("option");
-            option.value = topic.id;
-            option.textContent = `${topic.name} - ${topic.question_count}`;
-            option.selected = true;
-            activeTopicsSelect.appendChild(option);
+    const buildPlayerCards = (players) => {
+        playersData = players;
+        playersGrid.innerHTML = "";
+        players.forEach(player => {
+            const card = document.createElement("div");
+            card.className = "player-card" + (player.is_eliminated ? " eliminated" : "");
+            card.dataset.gamePlayerId = player.game_player_id;
+            card.style.setProperty("--player-color", player.color);
+            card.innerHTML = `
+                <div class="card-name">${player.name}</div>
+                <div class="card-score">${player.score} sq${player.is_eliminated ? " · elim." : ""}</div>
+            `;
+            if (!player.is_eliminated) {
+                card.addEventListener("click", () => onPlayerCardClick(player.game_player_id));
+            }
+            playersGrid.appendChild(card);
         });
+        renderPlayerCards();
     };
 
-    const addGameOption = (gameId, status = "lobby") => {
-        const option = document.createElement("option");
-        option.value = String(gameId);
-        option.textContent = `Game ${gameId}`;
-        option.dataset.status = status;
-        activeGameSelect.prepend(option);
-        activeGameSelect.value = String(gameId);
-        refreshStartGameAvailability();
-    };
-
-    const removeGameOption = (gameId) => {
-        const option = Array.from(activeGameSelect.options).find(
-            (entry) => Number(entry.value) === Number(gameId)
-        );
-        if (option) {
-            option.remove();
+    const onPlayerCardClick = (id) => {
+        if (id === selectedAttackerId) {
+            selectedAttackerId = null;
+        } else if (id === selectedDefenderId) {
+            selectedDefenderId = null;
+        } else if (selectedAttackerId === null) {
+            selectedAttackerId = id;
+        } else {
+            selectedDefenderId = id;
         }
-        refreshStartGameAvailability();
+        renderPlayerCards();
     };
 
-    const setBattleButtonsEnabled = (enabled) => {
-        battleCorrectButton.disabled = !enabled;
-        battleWrongButton.disabled = !enabled;
-    };
-
-    const renderBattleState = (state) => {
-        if (!state.active) {
-            battleSection.hidden = true;
-            battleStatusMessage.textContent = state.status === "finished" && state.winner_name
-                ? `Battle finished. Winner: ${state.winner_name}`
-                : "No active battle.";
-            setBattleButtonsEnabled(false);
-            return;
-        }
-
-        battleSection.hidden = false;
-        battleStatusMessage.textContent = "Battle in progress";
-        attackerName.textContent = state.attacker.name;
-        defenderName.textContent = state.defender.name;
-        attackerTime.textContent = state.attacker.time_remaining;
-        defenderTime.textContent = state.defender.time_remaining;
-        attackerScore.textContent = state.attacker.score;
-        defenderScore.textContent = state.defender.score;
-        battleQuestion.textContent = state.question_text || "-";
-        attackerCard.classList.toggle("turn-active", state.attacker.is_current_turn);
-        defenderCard.classList.toggle("turn-active", state.defender.is_current_turn);
-        setBattleButtonsEnabled(true);
-    };
+    // --- WebSocket rendering ---
 
     const renderGameState = (state) => {
-        const selectedOption = activeGameSelect.selectedOptions[0];
-        if (selectedOption && state.game) {
-            selectedOption.dataset.status = state.game.status;
-        }
+        const game = state.game;
+        if (!game) return;
 
-        const gameFinished = state.game && state.game.status === "finished";
-        finishedGameSection.hidden = !gameFinished;
-        winnerName.textContent = state.game?.winner_name || "-";
-        if (gameFinished) {
-            startGameMessage.textContent = "Game finished.";
-        }
-        refreshStartGameAvailability();
+        const option = gameSelect.selectedOptions[0];
+        if (option) option.dataset.status = game.status;
+
+        updateStatusBadge(game.status);
+        startGameBtn.hidden = game.status !== "lobby";
+        finishedPanel.hidden = game.status !== "finished";
+        winnerName.textContent = game.winner_name ?? "—";
+
+        const isActive = game.status === "active";
+        playersPanel.hidden = !isActive;
+        if (isActive) buildPlayerCards(state.players);
     };
 
-    const submitBattleAnswer = async (isCorrect) => {
-        const selectedGameId = getSelectedGameId();
-        if (!selectedGameId) {
-            battleStatusMessage.textContent = "Please select an active game.";
-            return;
-        }
+    const renderBattleState = (battle) => {
+        const hasBattle = Boolean(battle?.active);
+        battlePanel.hidden = !hasBattle;
 
-        setBattleButtonsEnabled(false);
-        battleStatusMessage.textContent = "Submitting answer...";
+        if (hasBattle) {
+            // Reset player selection while battle runs
+            selectedAttackerId = null;
+            selectedDefenderId = null;
+            battleSetup.hidden = true;
+            startBattleBtn.disabled = false;
+            battleStartMsg.textContent = "";
 
-        try {
-            const response = await fetch("/api/battle/answer/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
-                },
-                body: JSON.stringify({ correct: isCorrect, game_id: selectedGameId }),
-            });
-
-            if (!response.ok) {
-                const errorDetails = await response.text();
-                throw new Error(`Request failed with status ${response.status} ${response.statusText}: ${errorDetails}`);
-            }
-
-            const state = await response.json();
-            renderBattleState(state);
-        } catch (error) {
-            battleStatusMessage.textContent = `Failed to submit answer: ${error.message}`;
-            setBattleButtonsEnabled(true);
+            attackerName.textContent = battle.attacker.name;
+            defenderName.textContent = battle.defender.name;
+            attackerTime.textContent = battle.attacker.time_remaining;
+            defenderTime.textContent = battle.defender.time_remaining;
+            attackerScore.textContent = battle.attacker.score;
+            defenderScore.textContent = battle.defender.score;
+            battleQuestionBox.textContent = battle.question_text || "—";
+            attackerCard.classList.toggle("turn-active", battle.attacker.is_current_turn);
+            defenderCard.classList.toggle("turn-active", battle.defender.is_current_turn);
+            correctBtn.disabled = false;
+            wrongBtn.disabled = false;
+        } else {
+            correctBtn.disabled = true;
+            wrongBtn.disabled = true;
         }
     };
 
     const connectWebSocket = (gameId) => {
-        if (ws !== null) {
-            ws.close();
-            ws = null;
-        }
+        if (ws) { ws.close(); ws = null; }
+        if (!gameId) return;
 
-        if (!gameId) {
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
-            return;
-        }
-
-        const WS_SCHEME = location.protocol === "https:" ? "wss" : "ws";
-        ws = new WebSocket(`${WS_SCHEME}://${location.host}/ws/game/${gameId}/`);
+        const scheme = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(`${scheme}://${location.host}/ws/game/${gameId}/`);
 
         ws.addEventListener("message", (event) => {
             const state = JSON.parse(event.data);
             renderGameState(state);
             renderBattleState(state.battle);
         });
-
         ws.addEventListener("close", () => {
-            battleStatusMessage.textContent = "Connection closed. Reload to reconnect.";
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
+            battleMsg.textContent = "Connection closed. Reload to reconnect.";
         });
-
         ws.addEventListener("error", () => {
-            battleStatusMessage.textContent = "Connection error.";
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
+            battleMsg.textContent = "Connection error.";
         });
     };
 
-    createGameButton.addEventListener("click", async () => {
-        const topicIds = selectedTopics();
-        if (!topicIds.length) {
-            setupStatusMessage.textContent = "Select at least one active topic.";
-            return;
-        }
+    // --- Event handlers ---
 
-        createGameButton.disabled = true;
-        setupStatusMessage.textContent = "Creating game...";
-        try {
-            const response = await fetch("/api/game/create/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
-                },
-                body: JSON.stringify({
-                    active_topics: topicIds,
-                    players: gatherPlayers(),
-                }),
-            });
-
-            if (!response.ok) {
-                const errorDetails = await response.text();
-                throw new Error(errorDetails || `HTTP ${response.status}`);
-            }
-
-            const payload = await response.json();
-            addGameOption(payload.game_id);
-            setupStatusMessage.textContent = `Game ${payload.game_id} created.`;
-            startGameMessage.textContent = "";
-            connectWebSocket(getSelectedGameId());
-        } catch (error) {
-            setupStatusMessage.textContent = `Failed to create game: ${error.message}`;
-        } finally {
-            createGameButton.disabled = false;
-        }
-    });
-
-    newGameButton.addEventListener("click", async () => {
-        const selectedGameId = getSelectedGameId();
-        if (!selectedGameId) {
-            startGameMessage.textContent = "Please select a finished game.";
-            return;
-        }
-
-        newGameButton.disabled = true;
-        startGameMessage.textContent = "Creating new game...";
-
-        try {
-            const response = await fetch("/api/game/new/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
-                },
-                body: JSON.stringify({ game_id: selectedGameId }),
-            });
-
-            if (!response.ok) {
-                const errorDetails = await response.text();
-                throw new Error(errorDetails || `HTTP ${response.status}`);
-            }
-
-            const payload = await response.json();
-            removeGameOption(selectedGameId);
-            addGameOption(payload.game_id, "lobby");
-            finishedGameSection.hidden = true;
-            battleSection.hidden = true;
-            setBattleButtonsEnabled(false);
-            startGameMessage.textContent = `Game ${payload.game_id} is ready in lobby.`;
-            connectWebSocket(getSelectedGameId());
-        } catch (error) {
-            startGameMessage.textContent = `Failed to create new game: ${error.message}`;
-        } finally {
-            newGameButton.disabled = false;
-        }
-    });
-
-    playerCountInput.addEventListener("change", () => {
-        const count = Math.max(1, Math.min(25, Number(playerCountInput.value) || 2));
-        playerCountInput.value = String(count);
-        buildPlayerInputs(count);
-    });
-
-    startGameButton.addEventListener("click", async () => {
-        if (!hasAvailableGames()) {
-            startGameMessage.textContent = "No active games available.";
-            return;
-        }
-
-        const selectedGameId = getSelectedGameId();
-
-        if (!selectedGameId) {
-            startGameMessage.textContent = "Please select an active game.";
-            return;
-        }
-
-        startGameButton.disabled = true;
-        startGameMessage.textContent = "Starting game...";
-
-        try {
-            const response = await fetch("/api/game/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": decodeURIComponent(getCookie("csrftoken")),
-                },
-                body: JSON.stringify({ game_id: selectedGameId }),
-            });
-
-            if (!response.ok) {
-                const errorDetails = await response.text();
-                throw new Error(`Request failed with status ${response.status} ${response.statusText}: ${errorDetails}`);
-            }
-
-            startGameMessage.textContent = "Game start request sent.";
-        } catch (error) {
-            startGameMessage.textContent = `Failed to start game: ${error.message}`;
-        } finally {
-            startGameButton.disabled = !hasAvailableGames();
-        }
-    });
-
-    activeGameSelect.addEventListener("change", () => {
+    gameSelect.addEventListener("change", () => {
+        selectedAttackerId = null;
+        selectedDefenderId = null;
+        gameMsg.textContent = "";
+        updateStatusBadge(getSelectedGameStatus());
+        startGameBtn.hidden = getSelectedGameStatus() !== "lobby";
         connectWebSocket(getSelectedGameId());
     });
-    battleCorrectButton.addEventListener("click", () => submitBattleAnswer(true));
-    battleWrongButton.addEventListener("click", () => submitBattleAnswer(false));
-    buildPlayerInputs(Number(playerCountInput.value));
-    loadTopics().catch((error) => {
-        setupStatusMessage.textContent = `Failed to load topics: ${error.message}`;
+
+    startGameBtn.addEventListener("click", async () => {
+        const gameId = getSelectedGameId();
+        if (!gameId) return;
+        startGameBtn.disabled = true;
+        gameMsg.textContent = "Starting…";
+        try {
+            await postJson("/api/game/", { game_id: gameId });
+            gameMsg.textContent = "";
+        } catch (err) {
+            gameMsg.textContent = err.message;
+            gameMsg.classList.add("error");
+        } finally {
+            startGameBtn.disabled = false;
+        }
     });
-    refreshStartGameAvailability();
+
+    startBattleBtn.addEventListener("click", async () => {
+        const gameId = getSelectedGameId();
+        if (!gameId || selectedAttackerId === null || selectedDefenderId === null) return;
+        startBattleBtn.disabled = true;
+        battleStartMsg.textContent = "Starting battle…";
+        battleStartMsg.classList.remove("error");
+        try {
+            await postJson("/api/battle/start/", {
+                game_id: gameId,
+                attacker_id: selectedAttackerId,
+                defender_id: selectedDefenderId,
+            });
+            battleStartMsg.textContent = "";
+        } catch (err) {
+            battleStartMsg.textContent = err.message;
+            battleStartMsg.classList.add("error");
+            startBattleBtn.disabled = false;
+        }
+    });
+
+    const submitAnswer = async (isCorrect) => {
+        const gameId = getSelectedGameId();
+        if (!gameId) return;
+        correctBtn.disabled = true;
+        wrongBtn.disabled = true;
+        battleMsg.textContent = "";
+        try {
+            await postJson("/api/battle/answer/", { correct: isCorrect, game_id: gameId });
+        } catch (err) {
+            battleMsg.textContent = err.message;
+            battleMsg.classList.add("error");
+            correctBtn.disabled = false;
+            wrongBtn.disabled = false;
+        }
+    };
+
+    correctBtn.addEventListener("click", () => submitAnswer(true));
+    wrongBtn.addEventListener("click", () => submitAnswer(false));
+
+    newGameBtn.addEventListener("click", async () => {
+        const gameId = getSelectedGameId();
+        if (!gameId) return;
+        newGameBtn.disabled = true;
+        newGameMsg.textContent = "";
+        try {
+            const payload = await postJson("/api/game/new/", { game_id: gameId });
+            const option = document.createElement("option");
+            option.value = String(payload.game_id);
+            option.textContent = `Game ${payload.game_id}`;
+            option.dataset.status = "lobby";
+            gameSelect.prepend(option);
+            gameSelect.value = String(payload.game_id);
+            gameSelect.dispatchEvent(new Event("change"));
+        } catch (err) {
+            newGameMsg.textContent = err.message;
+            newGameMsg.classList.add("error");
+        } finally {
+            newGameBtn.disabled = false;
+        }
+    });
+
+    // Init
+    updateStatusBadge(getSelectedGameStatus());
+    startGameBtn.hidden = getSelectedGameStatus() !== "lobby";
     connectWebSocket(getSelectedGameId());
 </script>
 {% endblock %}
