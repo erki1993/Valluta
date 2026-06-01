@@ -44,8 +44,11 @@ INSTALLED_APPS = [
     'host',
 ]
 
+_whitenoise = ['whitenoise.middleware.WhiteNoiseMiddleware'] if os.environ.get('WHITENOISE') else []
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    *_whitenoise,
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
