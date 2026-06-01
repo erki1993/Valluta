@@ -56,23 +56,6 @@ def _create_lobby_game(player_configs: list[dict]) -> Game:
                 )
             )
 
-        squares = [
-            Square(game=game, row=row, col=col)
-            for row in range(5)
-            for col in range(5)
-        ]
-        Square.objects.bulk_create(squares)
-
-        available_squares = list(game.squares.all())
-        owned_squares = []
-        for game_player, square in zip(
-            game_players,
-            random.sample(available_squares, len(game_players)),
-        ):
-            square.owner = game_player
-            owned_squares.append(square)
-
-        Square.objects.bulk_update(owned_squares, ["owner"])
 
     return game
 
@@ -397,20 +380,12 @@ def api_start_game(request):
         return HttpResponseBadRequest("game_id must be a positive integer.")
 
     try:
-        selected_game_player = start_game(game_id)
+        start_game(game_id)
     except Game.DoesNotExist:
         return JsonResponse({"error": "Game not found."}, status=404)
 
     broadcast_game_state(game_id)
-    selected_player_name = (
-        selected_game_player.player.name if selected_game_player is not None else None
-    )
-    return JsonResponse(
-        {
-            "ok": True,
-            "selected_player": selected_player_name,
-        }
-    )
+    return JsonResponse({"ok": True})
 
 
 @require_GET

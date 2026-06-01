@@ -59,13 +59,7 @@ def check_game_over(game_id: int) -> GamePlayer | None:
     return winner
 
 
-def start_game(game_id: int) -> GamePlayer | None:
-    """
-    Activate the game and return a random active GamePlayer.
-
-    Raises Game.DoesNotExist when the given game does not exist.
-    Returns None when the game has no non-eliminated players with active Player records.
-    """
+def start_game(game_id: int) -> None:
     game = Game.objects.get(pk=game_id)
     game.status = Game.Status.ACTIVE
     game.save(update_fields=["status"])
@@ -78,9 +72,31 @@ def start_game(game_id: int) -> GamePlayer | None:
         ).select_related("player", "topic")
     )
     if not active_game_players:
-        return None
+        return
 
-    return random.choice(active_game_players)
+    # Create 25 squares fresh and distribute ALL evenly among players.
+    game.squares.all().delete()
+    Square.objects.bulk_create([
+        Square(game=game, row=row, col=col)
+        for row in range(5)
+        for col in range(5)
+    ])
+
+    all_squares = list(game.squares.all())
+    random.shuffle(all_squares)
+
+    n = len(active_game_players)
+    base = 25 // n
+    extra = 25 % n
+    to_update = []
+    idx = 0
+    for i, gp in enumerate(active_game_players):
+        count = base + (1 if i < extra else 0)
+        for sq in all_squares[idx: idx + count]:
+            sq.owner = gp
+            to_update.append(sq)
+        idx += count
+    Square.objects.bulk_update(to_update, ["owner"])
 
 
 def start_battle(game_id: int, attacker_id: int, defender_id: int) -> Battle:
@@ -95,12 +111,9 @@ def start_battle(game_id: int, attacker_id: int, defender_id: int) -> Battle:
     if attacker.pk == defender.pk:
         raise ValueError("Attacker and defender must be different players.")
 
-    contested_square = (
-        Square.objects.filter(game=game, owner__isnull=True).order_by("?").first()
-        or Square.objects.filter(game=game, owner=defender).order_by("?").first()
-    )
+    contested_square = Square.objects.filter(game=game, owner=defender).order_by("?").first()
     if contested_square is None:
-        raise ValueError("No available square to contest.")
+        raise ValueError("Defender has no squares to contest.")
 
     battle = Battle.objects.create(
         game=game,
@@ -221,9 +234,9 @@ def resolve_battle(battle: Battle) -> Battle:
         winner = battle.defender
         loser = battle.attacker
 
-    battle.contested_square.owner = winner
-    battle.contested_square.save(update_fields=["owner"])
-    Square.objects.filter(game=battle.game, owner=loser).update(owner=None)
+    Square.objects.filter(game=battle.game, owner=loser).update(owner=winner)
+    loser.is_eliminated = True
+    loser.save(update_fields=["is_eliminated"])
 
     battle.status = Battle.Status.FINISHED
     battle.winner = winner
