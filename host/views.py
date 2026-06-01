@@ -17,6 +17,7 @@ from game.services import (
     ensure_current_question,
     get_active_battle,
     get_game_winner,
+    pass_battle_question,
     start_battle,
     start_game,
     sync_battle_timer,
@@ -459,6 +460,25 @@ def api_start_battle(request):
 
     broadcast_game_state(game_id)
     return JsonResponse(_serialize_battle_state(battle))
+
+
+@require_POST
+def api_battle_pass(request):
+    payload = _get_payload(request)
+    if payload is None:
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    game_id = payload.get("game_id")
+    if game_id is not None and not isinstance(game_id, int):
+        return HttpResponseBadRequest("game_id must be an integer when provided.")
+
+    battle = get_active_battle(game_id=game_id)
+    if battle is None:
+        return JsonResponse({"error": "No active battle found."}, status=404)
+
+    updated_battle = pass_battle_question(battle)
+    broadcast_game_state(updated_battle.game_id)
+    return JsonResponse(_serialize_battle_state(updated_battle))
 
 
 @require_POST

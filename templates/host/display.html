@@ -196,6 +196,26 @@
     const winnerName = document.getElementById("winner-name");
     let celebrationKey = null;
     let celebrationTimeoutId = null;
+    let battleTimerInterval = null;
+    let battleTimerState = null;
+
+    const formatTimer = (ms) => {
+        const total = Math.max(0, Math.floor(ms / 1000));
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    };
+
+    const tickBattleTimer = () => {
+        if (!battleTimerState) return;
+        const elapsed = performance.now() - battleTimerState.receivedAt;
+        const atkMs = battleTimerState.currentTurn === 'attacker' ? Math.max(0, battleTimerState.attackerMs - elapsed) : battleTimerState.attackerMs;
+        const defMs = battleTimerState.currentTurn === 'defender' ? Math.max(0, battleTimerState.defenderMs - elapsed) : battleTimerState.defenderMs;
+        battleTimers.textContent = `${formatTimer(atkMs)} · ${formatTimer(defMs)}`;
+    };
+
+    const stopBattleTimer = () => {
+        if (battleTimerInterval !== null) { clearInterval(battleTimerInterval); battleTimerInterval = null; }
+        battleTimerState = null;
+    };
 
     const createSquareElement = () => {
         const square = document.createElement("div");
@@ -254,12 +274,23 @@
     const renderBattle = (battle) => {
         if (!battle || !battle.active) {
             battleBanner.hidden = true;
+            stopBattleTimer();
             return;
         }
 
         battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
-        battleTimers.textContent = `${battle.attacker_timer} · ${battle.defender_timer}`;
         battleBanner.hidden = false;
+
+        battleTimerState = {
+            attackerMs: battle.attacker_timer_ms,
+            defenderMs: battle.defender_timer_ms,
+            currentTurn: battle.current_turn,
+            receivedAt: performance.now(),
+        };
+        if (battleTimerInterval === null) {
+            battleTimerInterval = setInterval(tickBattleTimer, 200);
+        }
+        tickBattleTimer();
     };
 
     const stopCelebration = () => {
@@ -330,12 +361,14 @@
         });
 
         ws.addEventListener("close", () => {
+            stopBattleTimer();
             battleBanner.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection closed";
         });
 
         ws.addEventListener("error", () => {
+            stopBattleTimer();
             battleBanner.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection issue";

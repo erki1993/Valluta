@@ -172,8 +172,9 @@
     }
     #correct-btn          { background: #16a34a; color: #fff; }
     #correct-btn:disabled { background: #86efac; cursor: default; }
-    #wrong-btn            { background: #dc2626; color: #fff; }
-    #wrong-btn:disabled   { background: #fca5a5; cursor: default; }
+    #pass-btn             { background: #6b7280; color: #fff; }
+    #pass-btn:disabled    { background: #d1d5db; cursor: default; }
+    #pass-btn small       { font-size: 0.75em; opacity: 0.85; }
 
     .msg { font-size: 0.85rem; color: #64748b; margin: 0.4rem 0 0; min-height: 1.1em; }
     .msg.error { color: #dc2626; }
@@ -226,7 +227,7 @@
         <div id="battle-question-box" aria-live="polite">—</div>
         <div id="answer-buttons">
             <button id="correct-btn" type="button" disabled>✓ Correct</button>
-            <button id="wrong-btn" type="button" disabled>✗ Wrong</button>
+            <button id="pass-btn" type="button" disabled>→ Pass  <small>−3s</small></button>
         </div>
         <p id="battle-msg" class="msg" aria-live="polite"></p>
     </section>
@@ -261,7 +262,7 @@
     const defenderScore   = document.getElementById("defender-score");
     const battleQuestionBox = document.getElementById("battle-question-box");
     const correctBtn      = document.getElementById("correct-btn");
-    const wrongBtn        = document.getElementById("wrong-btn");
+    const passBtn         = document.getElementById("pass-btn");
     const battleMsg       = document.getElementById("battle-msg");
     const finishedPanel   = document.getElementById("finished-panel");
     const winnerName      = document.getElementById("winner-name");
@@ -272,6 +273,27 @@
     let selectedAttackerId = null;
     let selectedDefenderId = null;
     let playersData = [];
+    let timerInterval = null;
+    let timerState = null;
+
+    const formatTimer = (ms) => {
+        const total = Math.max(0, Math.floor(ms / 1000));
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    };
+
+    const tickTimer = () => {
+        if (!timerState) return;
+        const elapsed = performance.now() - timerState.receivedAt;
+        const atkMs = timerState.currentTurn === 'attacker' ? Math.max(0, timerState.attackerMs - elapsed) : timerState.attackerMs;
+        const defMs = timerState.currentTurn === 'defender' ? Math.max(0, timerState.defenderMs - elapsed) : timerState.defenderMs;
+        attackerTime.textContent = formatTimer(atkMs);
+        defenderTime.textContent = formatTimer(defMs);
+    };
+
+    const stopTimerCountdown = () => {
+        if (timerInterval !== null) { clearInterval(timerInterval); timerInterval = null; }
+        timerState = null;
+    };
 
     const getCookie = (name) => {
         const prefix = `${name}=`;
@@ -392,7 +414,6 @@
         battlePanel.hidden = !hasBattle;
 
         if (hasBattle) {
-            // Reset player selection while battle runs
             selectedAttackerId = null;
             selectedDefenderId = null;
             battleSetup.hidden = true;
@@ -401,18 +422,28 @@
 
             attackerName.textContent = battle.attacker.name;
             defenderName.textContent = battle.defender.name;
-            attackerTime.textContent = battle.attacker.time_remaining;
-            defenderTime.textContent = battle.defender.time_remaining;
             attackerScore.textContent = battle.attacker.score;
             defenderScore.textContent = battle.defender.score;
             battleQuestionBox.textContent = battle.question_text || "—";
             attackerCard.classList.toggle("turn-active", battle.attacker.is_current_turn);
             defenderCard.classList.toggle("turn-active", battle.defender.is_current_turn);
             correctBtn.disabled = false;
-            wrongBtn.disabled = false;
+            passBtn.disabled = false;
+
+            timerState = {
+                attackerMs: battle.attacker.time_remaining_ms,
+                defenderMs: battle.defender.time_remaining_ms,
+                currentTurn: battle.current_turn,
+                receivedAt: performance.now(),
+            };
+            if (timerInterval === null) {
+                timerInterval = setInterval(tickTimer, 200);
+            }
+            tickTimer();
         } else {
+            stopTimerCountdown();
             correctBtn.disabled = true;
-            wrongBtn.disabled = true;
+            passBtn.disabled = true;
         }
     };
 
@@ -429,9 +460,11 @@
             renderBattleState(state.battle);
         });
         ws.addEventListener("close", () => {
+            stopTimerCountdown();
             battleMsg.textContent = "Connection closed. Reload to reconnect.";
         });
         ws.addEventListener("error", () => {
+            stopTimerCountdown();
             battleMsg.textContent = "Connection error.";
         });
     };
@@ -483,24 +516,40 @@
         }
     });
 
-    const submitAnswer = async (isCorrect) => {
+    const submitAnswer = async () => {
         const gameId = getSelectedGameId();
         if (!gameId) return;
         correctBtn.disabled = true;
-        wrongBtn.disabled = true;
+        passBtn.disabled = true;
         battleMsg.textContent = "";
         try {
-            await postJson("/api/battle/answer/", { correct: isCorrect, game_id: gameId });
+            await postJson("/api/battle/answer/", { correct: true, game_id: gameId });
         } catch (err) {
             battleMsg.textContent = err.message;
             battleMsg.classList.add("error");
             correctBtn.disabled = false;
-            wrongBtn.disabled = false;
+            passBtn.disabled = false;
         }
     };
 
-    correctBtn.addEventListener("click", () => submitAnswer(true));
-    wrongBtn.addEventListener("click", () => submitAnswer(false));
+    const submitPass = async () => {
+        const gameId = getSelectedGameId();
+        if (!gameId) return;
+        correctBtn.disabled = true;
+        passBtn.disabled = true;
+        battleMsg.textContent = "";
+        try {
+            await postJson("/api/battle/pass/", { game_id: gameId });
+        } catch (err) {
+            battleMsg.textContent = err.message;
+            battleMsg.classList.add("error");
+            correctBtn.disabled = false;
+            passBtn.disabled = false;
+        }
+    };
+
+    correctBtn.addEventListener("click", () => submitAnswer());
+    passBtn.addEventListener("click", () => submitPass());
 
     newGameBtn.addEventListener("click", async () => {
         const gameId = getSelectedGameId();

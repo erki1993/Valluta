@@ -213,6 +213,46 @@ def resolve_battle(battle: Battle) -> Battle:
 
 
 @transaction.atomic
+def pass_battle_question(battle: Battle) -> Battle:
+    PASS_PENALTY_MS = 3000
+    battle = Battle.objects.select_for_update().get(id=battle.id)
+    if battle.status != Battle.Status.ACTIVE:
+        return battle
+
+    now = timezone.now()
+    elapsed_turn_ms = max(0, int((now - battle.turn_started_at).total_seconds() * 1000))
+    sync_battle_timer(battle, now=now)
+    battle.refresh_from_db()
+    if battle.status != Battle.Status.ACTIVE:
+        return battle
+
+    current_question = ensure_current_question(battle)
+    if current_question is not None:
+        current_question.answered_correctly = False
+        current_question.time_taken_ms = elapsed_turn_ms
+        current_question.save(update_fields=["answered_correctly", "time_taken_ms"])
+
+    update_fields = ["turn_started_at"]
+    if battle.current_turn == Battle.Turn.ATTACKER:
+        battle.attacker_time_remaining_ms = max(0, battle.attacker_time_remaining_ms - PASS_PENALTY_MS)
+        update_fields.append("attacker_time_remaining_ms")
+    else:
+        battle.defender_time_remaining_ms = max(0, battle.defender_time_remaining_ms - PASS_PENALTY_MS)
+        update_fields.append("defender_time_remaining_ms")
+
+    battle.turn_started_at = now
+    battle.save(update_fields=update_fields)
+    ensure_current_question(battle)
+    battle.refresh_from_db()
+
+    if battle.attacker_time_remaining_ms <= 0 or battle.defender_time_remaining_ms <= 0:
+        resolve_battle(battle)
+        battle.refresh_from_db()
+
+    return battle
+
+
+@transaction.atomic
 def answer_battle_question(battle: Battle, is_correct: bool) -> Battle:
     battle = Battle.objects.select_for_update().get(id=battle.id)
     if battle.status != Battle.Status.ACTIVE:
