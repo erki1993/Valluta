@@ -81,8 +81,10 @@ class Battle(models.Model):
         DEFENDER = "defender", "Defender"
 
     class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
         ACTIVE = "active", "Active"
         FINISHED = "finished", "Finished"
+        CLOSED = "closed", "Closed"
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="battles")
     attacker = models.ForeignKey(

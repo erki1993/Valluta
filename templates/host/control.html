@@ -134,6 +134,22 @@
     #battle-panel { border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; background: #fff; }
     #battle-panel h2 { margin: 0 0 0.75rem; }
 
+    /* Prematch section */
+    #prematch-section { text-align: center; padding: 0.5rem 0; }
+    #prematch-players { font-size: 1.1rem; font-weight: bold; color: #334155; margin: 0 0 0.75rem; }
+    #begin-match-btn {
+        padding: 0.6rem 2rem;
+        background: #16a34a;
+        color: #fff;
+        border: none;
+        border-radius: 0.45rem;
+        cursor: pointer;
+        font-size: 1.05rem;
+        font-weight: bold;
+    }
+    #begin-match-btn:disabled { background: #86efac; cursor: default; }
+
+    /* Active section */
     #battle-cards {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -176,6 +192,21 @@
     #pass-btn:disabled    { background: #d1d5db; cursor: default; }
     #pass-btn small       { font-size: 0.75em; opacity: 0.85; }
 
+    /* Result section */
+    #result-section { text-align: center; padding: 0.5rem 0; }
+    #result-text { font-size: 1rem; color: #334155; margin: 0 0 0.75rem; }
+    #end-match-btn {
+        padding: 0.5rem 1.5rem;
+        background: #64748b;
+        color: #fff;
+        border: none;
+        border-radius: 0.45rem;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: bold;
+    }
+    #end-match-btn:disabled { background: #94a3b8; cursor: default; }
+
     .msg { font-size: 0.85rem; color: #64748b; margin: 0.4rem 0 0; min-height: 1.1em; }
     .msg.error { color: #dc2626; }
 </style>
@@ -210,25 +241,44 @@
 
     <section id="battle-panel" hidden>
         <h2>Battle</h2>
-        <div id="battle-cards">
-            <div id="attacker-card" class="battle-card">
-                <div class="card-role">⚔ Attacker</div>
-                <div class="card-name" id="attacker-name">—</div>
-                <div class="card-timer" id="attacker-time">01:00</div>
-                <div class="card-score">Score: <span id="attacker-score">0</span></div>
+
+        <!-- PENDING: waiting for host to begin -->
+        <div id="prematch-section" hidden>
+            <p id="prematch-players">— vs —</p>
+            <button id="begin-match-btn" type="button">▶ Begin Match</button>
+            <p id="prematch-msg" class="msg" aria-live="polite"></p>
+        </div>
+
+        <!-- ACTIVE: battle in progress -->
+        <div id="active-section" hidden>
+            <div id="battle-cards">
+                <div id="attacker-card" class="battle-card">
+                    <div class="card-role">⚔ Attacker</div>
+                    <div class="card-name" id="attacker-name">—</div>
+                    <div class="card-timer" id="attacker-time">01:00</div>
+                    <div class="card-score">Score: <span id="attacker-score">0</span></div>
+                </div>
+                <div id="defender-card" class="battle-card">
+                    <div class="card-role">🛡 Defender</div>
+                    <div class="card-name" id="defender-name">—</div>
+                    <div class="card-timer" id="defender-time">01:00</div>
+                    <div class="card-score">Score: <span id="defender-score">0</span></div>
+                </div>
             </div>
-            <div id="defender-card" class="battle-card">
-                <div class="card-role">🛡 Defender</div>
-                <div class="card-name" id="defender-name">—</div>
-                <div class="card-timer" id="defender-time">01:00</div>
-                <div class="card-score">Score: <span id="defender-score">0</span></div>
+            <div id="battle-question-box" aria-live="polite">—</div>
+            <div id="answer-buttons">
+                <button id="correct-btn" type="button" disabled>✓ Correct</button>
+                <button id="pass-btn" type="button" disabled>→ Pass  <small>−3s</small></button>
             </div>
         </div>
-        <div id="battle-question-box" aria-live="polite">—</div>
-        <div id="answer-buttons">
-            <button id="correct-btn" type="button" disabled>✓ Correct</button>
-            <button id="pass-btn" type="button" disabled>→ Pass  <small>−3s</small></button>
+
+        <!-- FINISHED: show result, wait for host to dismiss -->
+        <div id="result-section" hidden>
+            <p id="result-text">—</p>
+            <button id="end-match-btn" type="button">✕ End Match</button>
+            <p id="end-match-msg" class="msg" aria-live="polite"></p>
         </div>
+
         <p id="battle-msg" class="msg" aria-live="polite"></p>
     </section>
 
@@ -241,40 +291,52 @@
 </div>
 
 <script>
-    const gameSelect      = document.getElementById("game-select");
-    const statusBadge     = document.getElementById("status-badge");
-    const startGameBtn    = document.getElementById("start-game-btn");
-    const gameMsg         = document.getElementById("game-msg");
-    const playersPanel    = document.getElementById("players-panel");
-    const playersGrid     = document.getElementById("players-grid");
-    const battleSetup     = document.getElementById("battle-setup");
-    const vsLine          = document.getElementById("vs-line");
-    const startBattleBtn  = document.getElementById("start-battle-btn");
-    const battleStartMsg  = document.getElementById("battle-start-msg");
-    const battlePanel     = document.getElementById("battle-panel");
-    const attackerCard    = document.getElementById("attacker-card");
-    const defenderCard    = document.getElementById("defender-card");
-    const attackerName    = document.getElementById("attacker-name");
-    const defenderName    = document.getElementById("defender-name");
-    const attackerTime    = document.getElementById("attacker-time");
-    const defenderTime    = document.getElementById("defender-time");
-    const attackerScore   = document.getElementById("attacker-score");
-    const defenderScore   = document.getElementById("defender-score");
+    const gameSelect       = document.getElementById("game-select");
+    const statusBadge      = document.getElementById("status-badge");
+    const startGameBtn     = document.getElementById("start-game-btn");
+    const gameMsg          = document.getElementById("game-msg");
+    const playersPanel     = document.getElementById("players-panel");
+    const playersGrid      = document.getElementById("players-grid");
+    const battleSetup      = document.getElementById("battle-setup");
+    const vsLine           = document.getElementById("vs-line");
+    const startBattleBtn   = document.getElementById("start-battle-btn");
+    const battleStartMsg   = document.getElementById("battle-start-msg");
+    const battlePanel      = document.getElementById("battle-panel");
+    // Sub-sections
+    const prematchSection  = document.getElementById("prematch-section");
+    const prematchPlayers  = document.getElementById("prematch-players");
+    const beginMatchBtn    = document.getElementById("begin-match-btn");
+    const prematchMsg      = document.getElementById("prematch-msg");
+    const activeSection    = document.getElementById("active-section");
+    const attackerCard     = document.getElementById("attacker-card");
+    const defenderCard     = document.getElementById("defender-card");
+    const attackerName     = document.getElementById("attacker-name");
+    const defenderName     = document.getElementById("defender-name");
+    const attackerTime     = document.getElementById("attacker-time");
+    const defenderTime     = document.getElementById("defender-time");
+    const attackerScore    = document.getElementById("attacker-score");
+    const defenderScore    = document.getElementById("defender-score");
     const battleQuestionBox = document.getElementById("battle-question-box");
-    const correctBtn      = document.getElementById("correct-btn");
-    const passBtn         = document.getElementById("pass-btn");
-    const battleMsg       = document.getElementById("battle-msg");
-    const finishedPanel   = document.getElementById("finished-panel");
-    const winnerName      = document.getElementById("winner-name");
-    const newGameBtn      = document.getElementById("new-game-btn");
-    const newGameMsg      = document.getElementById("new-game-msg");
+    const correctBtn       = document.getElementById("correct-btn");
+    const passBtn          = document.getElementById("pass-btn");
+    const resultSection    = document.getElementById("result-section");
+    const resultText       = document.getElementById("result-text");
+    const endMatchBtn      = document.getElementById("end-match-btn");
+    const endMatchMsg      = document.getElementById("end-match-msg");
+    const battleMsg        = document.getElementById("battle-msg");
+    const finishedPanel    = document.getElementById("finished-panel");
+    const winnerName       = document.getElementById("winner-name");
+    const newGameBtn       = document.getElementById("new-game-btn");
+    const newGameMsg       = document.getElementById("new-game-msg");
 
     let ws = null;
     let selectedAttackerId = null;
     let selectedDefenderId = null;
     let playersData = [];
+    let currentGameStatus = null;
     let timerInterval = null;
     let timerState = null;
+    let timeoutFired = false;
 
     const formatTimer = (ms) => {
         const total = Math.max(0, Math.floor(ms / 1000));
@@ -288,11 +350,18 @@
         const defMs = timerState.currentTurn === 'defender' ? Math.max(0, timerState.defenderMs - elapsed) : timerState.defenderMs;
         attackerTime.textContent = formatTimer(atkMs);
         defenderTime.textContent = formatTimer(defMs);
+
+        if (!timeoutFired && (atkMs === 0 || defMs === 0)) {
+            timeoutFired = true;
+            const gameId = getSelectedGameId();
+            if (gameId) postJson("/api/battle/timeout/", { game_id: gameId }).catch(() => {});
+        }
     };
 
     const stopTimerCountdown = () => {
         if (timerInterval !== null) { clearInterval(timerInterval); timerInterval = null; }
         timerState = null;
+        timeoutFired = false;
     };
 
     const getCookie = (name) => {
@@ -378,15 +447,10 @@
     };
 
     const onPlayerCardClick = (id) => {
-        if (id === selectedAttackerId) {
-            selectedAttackerId = null;
-        } else if (id === selectedDefenderId) {
-            selectedDefenderId = null;
-        } else if (selectedAttackerId === null) {
-            selectedAttackerId = id;
-        } else {
-            selectedDefenderId = id;
-        }
+        if (id === selectedAttackerId)      { selectedAttackerId = null; }
+        else if (id === selectedDefenderId) { selectedDefenderId = null; }
+        else if (selectedAttackerId === null) { selectedAttackerId = id; }
+        else                                { selectedDefenderId = id; }
         renderPlayerCards();
     };
 
@@ -396,6 +460,8 @@
         const game = state.game;
         if (!game) return;
 
+        currentGameStatus = game.status;
+
         const option = gameSelect.selectedOptions[0];
         if (option) option.dataset.status = game.status;
 
@@ -404,16 +470,28 @@
         finishedPanel.hidden = game.status !== "finished";
         winnerName.textContent = game.winner_name ?? "—";
 
-        const isActive = game.status === "active";
-        playersPanel.hidden = !isActive;
-        if (isActive) buildPlayerCards(state.players);
+        if (game.status === "active") buildPlayerCards(state.players);
     };
 
     const renderBattleState = (battle) => {
-        const hasBattle = Boolean(battle?.active);
-        battlePanel.hidden = !hasBattle;
+        const isPending  = battle?.status === "pending";
+        const isActive   = Boolean(battle?.active);
+        const isFinished = battle?.status === "finished";
+        const hasBattle  = isPending || isActive || isFinished;
 
-        if (hasBattle) {
+        battlePanel.hidden  = !hasBattle;
+        playersPanel.hidden = hasBattle || currentGameStatus !== "active";
+
+        prematchSection.hidden = !isPending;
+        activeSection.hidden   = !isActive;
+        resultSection.hidden   = !isFinished;
+
+        if (isPending) {
+            prematchPlayers.textContent = `${battle.attacker.name} vs ${battle.defender.name}`;
+            beginMatchBtn.disabled = false;
+            prematchMsg.textContent = "";
+            stopTimerCountdown();
+        } else if (isActive) {
             selectedAttackerId = null;
             selectedDefenderId = null;
             battleSetup.hidden = true;
@@ -436,10 +514,20 @@
                 currentTurn: battle.current_turn,
                 receivedAt: performance.now(),
             };
-            if (timerInterval === null) {
-                timerInterval = setInterval(tickTimer, 200);
-            }
+            timeoutFired = false;
+            if (timerInterval === null) timerInterval = setInterval(tickTimer, 200);
             tickTimer();
+        } else if (isFinished) {
+            stopTimerCountdown();
+            correctBtn.disabled = true;
+            passBtn.disabled = true;
+            endMatchBtn.disabled = false;
+            endMatchMsg.textContent = "";
+
+            const atkWon = battle.winner_name === battle.attacker.name;
+            const winner = atkWon ? battle.attacker : battle.defender;
+            const loser  = atkWon ? battle.defender : battle.attacker;
+            resultText.textContent = `Winner: ${winner.name} (${winner.score}) — Loser: ${loser.name} (${loser.score})`;
         } else {
             stopTimerCountdown();
             correctBtn.disabled = true;
@@ -500,7 +588,7 @@
         const gameId = getSelectedGameId();
         if (!gameId || selectedAttackerId === null || selectedDefenderId === null) return;
         startBattleBtn.disabled = true;
-        battleStartMsg.textContent = "Starting battle…";
+        battleStartMsg.textContent = "Creating battle…";
         battleStartMsg.classList.remove("error");
         try {
             await postJson("/api/battle/start/", {
@@ -513,6 +601,38 @@
             battleStartMsg.textContent = err.message;
             battleStartMsg.classList.add("error");
             startBattleBtn.disabled = false;
+        }
+    });
+
+    beginMatchBtn.addEventListener("click", async () => {
+        const gameId = getSelectedGameId();
+        if (!gameId) return;
+        beginMatchBtn.disabled = true;
+        prematchMsg.textContent = "Starting…";
+        prematchMsg.classList.remove("error");
+        try {
+            await postJson("/api/battle/begin/", { game_id: gameId });
+            prematchMsg.textContent = "";
+        } catch (err) {
+            prematchMsg.textContent = err.message;
+            prematchMsg.classList.add("error");
+            beginMatchBtn.disabled = false;
+        }
+    });
+
+    endMatchBtn.addEventListener("click", async () => {
+        const gameId = getSelectedGameId();
+        if (!gameId) return;
+        endMatchBtn.disabled = true;
+        endMatchMsg.textContent = "Closing…";
+        endMatchMsg.classList.remove("error");
+        try {
+            await postJson("/api/battle/close/", { game_id: gameId });
+            endMatchMsg.textContent = "";
+        } catch (err) {
+            endMatchMsg.textContent = err.message;
+            endMatchMsg.classList.add("error");
+            endMatchBtn.disabled = false;
         }
     });
 

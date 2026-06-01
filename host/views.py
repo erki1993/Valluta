@@ -14,10 +14,13 @@ from django.views.decorators.http import require_POST
 from game.models import Battle, Game, GamePlayer, Player, Square, Topic
 from game.services import (
     answer_battle_question,
+    begin_battle,
+    close_battle,
     ensure_current_question,
     get_active_battle,
     get_game_winner,
     pass_battle_question,
+    resolve_battle,
     start_battle,
     start_game,
     sync_battle_timer,
@@ -163,16 +166,19 @@ def _serialize_game_state(game: Game | None) -> dict:
     battle = get_active_battle(game_id=game.id)
     battle_payload = {"active": False}
     if battle is not None:
-        sync_battle_timer(battle)
-        battle.refresh_from_db()
-        ensure_current_question(battle)
-        battle.refresh_from_db()
+        if battle.status == Battle.Status.ACTIVE:
+            sync_battle_timer(battle)
+            battle.refresh_from_db()
+            ensure_current_question(battle)
+            battle.refresh_from_db()
+
         current_question = (
             battle.battle_questions.filter(answered_correctly__isnull=True)
             .select_related("question")
             .order_by("order", "id")
             .first()
-        )
+        ) if battle.status == Battle.Status.ACTIVE else None
+
         contested_square = battle.contested_square
         attacker_square = (
             Square.objects.filter(game=game, owner=battle.attacker)
@@ -206,6 +212,7 @@ def _serialize_game_state(game: Game | None) -> dict:
             "defender_score": battle.defender_score,
             "attacker": {
                 "name": battle.attacker.player.name,
+                "color": battle.attacker.player.color,
                 "time_remaining_ms": battle.attacker_time_remaining_ms,
                 "time_remaining": _format_timer(battle.attacker_time_remaining_ms),
                 "score": battle.attacker_score,
@@ -213,6 +220,7 @@ def _serialize_game_state(game: Game | None) -> dict:
             },
             "defender": {
                 "name": battle.defender.player.name,
+                "color": battle.defender.player.color,
                 "time_remaining_ms": battle.defender_time_remaining_ms,
                 "time_remaining": _format_timer(battle.defender_time_remaining_ms),
                 "score": battle.defender_score,
@@ -459,6 +467,75 @@ def api_start_battle(request):
         return JsonResponse({"error": "Game or player not found."}, status=404)
 
     broadcast_game_state(game_id)
+    return JsonResponse(_serialize_battle_state(battle))
+
+
+@require_POST
+def api_begin_battle(request):
+    payload = _get_payload(request)
+    if payload is None:
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    game_id = payload.get("game_id")
+    if game_id is not None and not isinstance(game_id, int):
+        return HttpResponseBadRequest("game_id must be an integer when provided.")
+
+    battle = get_active_battle(game_id=game_id)
+    if battle is None:
+        return JsonResponse({"error": "No pending battle found."}, status=404)
+    if battle.status != Battle.Status.PENDING:
+        return JsonResponse({"error": "Battle is not in pending state."}, status=400)
+
+    updated_battle = begin_battle(battle)
+    broadcast_game_state(updated_battle.game_id)
+    return JsonResponse(_serialize_battle_state(updated_battle))
+
+
+@require_POST
+def api_close_battle(request):
+    payload = _get_payload(request)
+    if payload is None:
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    game_id = payload.get("game_id")
+    if game_id is not None and not isinstance(game_id, int):
+        return HttpResponseBadRequest("game_id must be an integer when provided.")
+
+    battle = get_active_battle(game_id=game_id)
+    if battle is None:
+        return JsonResponse({"error": "No finished battle found."}, status=404)
+    if battle.status != Battle.Status.FINISHED:
+        return JsonResponse({"error": "Battle is not in finished state."}, status=400)
+
+    close_battle(battle)
+    broadcast_game_state(battle.game_id)
+    return JsonResponse({"ok": True})
+
+
+@require_POST
+def api_battle_timeout(request):
+    payload = _get_payload(request)
+    if payload is None:
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    game_id = payload.get("game_id")
+    if game_id is not None and not isinstance(game_id, int):
+        return HttpResponseBadRequest("game_id must be an integer when provided.")
+
+    battle = get_active_battle(game_id=game_id)
+    if battle is None:
+        return JsonResponse({"active": False})
+
+    sync_battle_timer(battle)
+    battle.refresh_from_db()
+
+    if battle.status == Battle.Status.ACTIVE and (
+        battle.attacker_time_remaining_ms <= 0 or battle.defender_time_remaining_ms <= 0
+    ):
+        resolve_battle(battle)
+        battle.refresh_from_db()
+
+    broadcast_game_state(battle.game_id)
     return JsonResponse(_serialize_battle_state(battle))
 
 

@@ -107,13 +107,33 @@ def start_battle(game_id: int, attacker_id: int, defender_id: int) -> Battle:
         attacker=attacker,
         defender=defender,
         contested_square=contested_square,
+        status=Battle.Status.PENDING,
     )
     ensure_current_question(battle)
     return battle
 
 
+def begin_battle(battle: Battle) -> Battle:
+    if battle.status != Battle.Status.PENDING:
+        return battle
+    battle.status = Battle.Status.ACTIVE
+    battle.turn_started_at = timezone.now()
+    battle.save(update_fields=["status", "turn_started_at"])
+    return battle
+
+
+def close_battle(battle: Battle) -> Battle:
+    if battle.status != Battle.Status.FINISHED:
+        return battle
+    battle.status = Battle.Status.CLOSED
+    battle.save(update_fields=["status"])
+    return battle
+
+
 def get_active_battle(game_id: int | None = None) -> Battle | None:
-    queryset = Battle.objects.filter(status=Battle.Status.ACTIVE).select_related(
+    queryset = Battle.objects.filter(
+        status__in=[Battle.Status.PENDING, Battle.Status.ACTIVE, Battle.Status.FINISHED]
+    ).select_related(
         "attacker__player",
         "attacker__topic",
         "defender__player",

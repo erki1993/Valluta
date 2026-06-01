@@ -10,6 +10,9 @@ urlpatterns = [
     path("game/state/", views.api_game_state, name="api-game-state"),
     path("battle/state/", views.api_battle_state, name="api-battle-state"),
     path("battle/start/", views.api_start_battle, name="api-battle-start"),
+    path("battle/begin/", views.api_begin_battle, name="api-battle-begin"),
+    path("battle/close/", views.api_close_battle, name="api-battle-close"),
+    path("battle/timeout/", views.api_battle_timeout, name="api-battle-timeout"),
     path("battle/pass/", views.api_battle_pass, name="api-battle-pass"),
     path("battle/answer/", views.api_battle_answer, name="api-battle-answer"),
 ]

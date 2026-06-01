@@ -16,6 +16,23 @@
     <div class="battle-name">- vs -</div>
     <div class="battle-timers">00:00 · 00:00</div>
 </div>
+<section id="battle-start-screen" hidden aria-live="polite">
+    <div id="battle-start-card">
+        <p id="battle-start-label">GET READY</p>
+        <div id="battle-start-players">
+            <span id="battle-start-attacker">—</span>
+            <span id="battle-start-vs">vs</span>
+            <span id="battle-start-defender">—</span>
+        </div>
+    </div>
+</section>
+<section id="battle-result-screen" hidden aria-live="polite">
+    <div id="battle-result-card">
+        <p id="battle-result-label">ROUND OVER</p>
+        <div id="battle-result-winner-row">🏆 <span id="battle-result-winner">—</span></div>
+        <div id="battle-result-loser-row"><span id="battle-result-loser">—</span></div>
+    </div>
+</section>
 <section id="winner-screen" hidden aria-live="polite">
     <div id="winner-card">
         <p id="winner-label">VÕITJA!</p>
@@ -168,6 +185,65 @@
         color: #ffe600;
         font-weight: 900;
     }
+    #battle-start-screen, #battle-result-screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background: rgba(0, 0, 0, 0.88);
+        z-index: 150;
+    }
+    #battle-start-card, #battle-result-card {
+        text-align: center;
+        padding: 3rem 4rem;
+        border-radius: 1.4rem;
+        background: rgba(0, 0, 0, 0.72);
+        min-width: min(54rem, 100%);
+    }
+    #battle-start-card { border: 0.35rem solid #ffe600; box-shadow: 0 0 3rem rgba(255,230,0,0.25); }
+    #battle-result-card { border: 0.35rem solid #475569; }
+
+    #battle-start-label {
+        margin: 0 0 1.5rem;
+        font-size: clamp(2rem, 5vw, 5rem);
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #ffe600;
+    }
+    #battle-start-players {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1.2rem;
+        flex-wrap: wrap;
+        font-size: clamp(2rem, 5vw, 5rem);
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+    #battle-start-vs { font-size: 0.5em; color: #888; }
+
+    #battle-result-label {
+        margin: 0 0 1.5rem;
+        font-size: clamp(1.4rem, 3.5vw, 3.5rem);
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #94a3b8;
+    }
+    #battle-result-winner-row {
+        font-size: clamp(2rem, 4.5vw, 4.5rem);
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 0.75rem;
+    }
+    #battle-result-loser-row {
+        font-size: clamp(1.2rem, 2.5vw, 2.5rem);
+        color: #94a3b8;
+        text-transform: uppercase;
+    }
     @keyframes battlePulse {
         0% {
             box-shadow: 0 0 0 0 rgba(255, 230, 0, 0.9);
@@ -191,6 +267,12 @@
     const battleBanner = document.getElementById("battle-banner");
     const battleName = battleBanner.querySelector(".battle-name");
     const battleTimers = battleBanner.querySelector(".battle-timers");
+    const battleStartScreen = document.getElementById("battle-start-screen");
+    const battleStartAttacker = document.getElementById("battle-start-attacker");
+    const battleStartDefender = document.getElementById("battle-start-defender");
+    const battleResultScreen = document.getElementById("battle-result-screen");
+    const battleResultWinner = document.getElementById("battle-result-winner");
+    const battleResultLoser = document.getElementById("battle-result-loser");
     const winnerScreen = document.getElementById("winner-screen");
     const winnerCard = document.getElementById("winner-card");
     const winnerName = document.getElementById("winner-name");
@@ -272,25 +354,43 @@
     };
 
     const renderBattle = (battle) => {
-        if (!battle || !battle.active) {
-            battleBanner.hidden = true;
-            stopBattleTimer();
-            return;
-        }
+        battleBanner.hidden = true;
+        battleStartScreen.hidden = true;
+        battleResultScreen.hidden = true;
+        stopBattleTimer();
 
-        battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
-        battleBanner.hidden = false;
+        if (!battle) return;
 
-        battleTimerState = {
-            attackerMs: battle.attacker_timer_ms,
-            defenderMs: battle.defender_timer_ms,
-            currentTurn: battle.current_turn,
-            receivedAt: performance.now(),
-        };
-        if (battleTimerInterval === null) {
-            battleTimerInterval = setInterval(tickBattleTimer, 200);
+        if (battle.status === "pending") {
+            battleStartAttacker.textContent = battle.attacker.name;
+            battleStartAttacker.style.color = battle.attacker.color || "#fff";
+            battleStartDefender.textContent = battle.defender.name;
+            battleStartDefender.style.color = battle.defender.color || "#fff";
+            battleStartScreen.hidden = false;
+        } else if (battle.active) {
+            battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
+            battleBanner.hidden = false;
+
+            battleTimerState = {
+                attackerMs: battle.attacker_timer_ms,
+                defenderMs: battle.defender_timer_ms,
+                currentTurn: battle.current_turn,
+                receivedAt: performance.now(),
+            };
+            if (battleTimerInterval === null) {
+                battleTimerInterval = setInterval(tickBattleTimer, 200);
+            }
+            tickBattleTimer();
+        } else if (battle.status === "finished") {
+            const atkWon = battle.winner_name === battle.attacker.name;
+            const winner = atkWon ? battle.attacker : battle.defender;
+            const loser  = atkWon ? battle.defender : battle.attacker;
+            battleResultWinner.textContent = `${winner.name}  ${winner.score}`;
+            battleResultWinner.style.color = winner.color || "#fff";
+            battleResultLoser.textContent  = `${loser.name}  ${loser.score}`;
+            battleResultLoser.style.color  = loser.color || "#94a3b8";
+            battleResultScreen.hidden = false;
         }
-        tickBattleTimer();
     };
 
     const stopCelebration = () => {
