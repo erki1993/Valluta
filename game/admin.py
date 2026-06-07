@@ -107,10 +107,11 @@ class QuestionAdmin(admin.ModelAdmin):
                         question_text = (row.get("question") or "").strip()
                         image_url = (row.get("image_url") or "").strip()
                         answer_text = (row.get("answer") or "").strip()
+                        has_prompt = bool(question_text or image_url)
 
                         if not topic_name and not question_text and not image_url and not answer_text:
                             continue
-                        if not topic_name or not answer_text or (not question_text and not image_url):
+                        if not topic_name or not answer_text or not has_prompt:
                             missing = [
                                 column
                                 for column, value in {
@@ -119,7 +120,7 @@ class QuestionAdmin(admin.ModelAdmin):
                                 }.items()
                                 if not value
                             ]
-                            if not question_text and not image_url:
+                            if not has_prompt:
                                 missing.append("question or image_url")
                             raise ValueError(
                                 f"Row {row_number} is missing values for: {', '.join(missing)}."

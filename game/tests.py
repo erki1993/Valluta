@@ -192,6 +192,25 @@ class QuestionCsvImportAdminTests(TestCase):
             ],
         )
 
+    def test_import_csv_supports_text_only_questions(self):
+        csv_file = SimpleUploadedFile(
+            "questions.csv",
+            b"topic,question,answer\nScience,What is H2O?,Water\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            reverse("admin:game_question_import_csv"),
+            {"csv_file": csv_file},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(Question.objects.values_list("text", "image_url", "answer")),
+            [("What is H2O?", "", "Water")],
+        )
+
     def test_import_csv_rejects_missing_required_columns(self):
         csv_file = SimpleUploadedFile(
             "bad.csv",
