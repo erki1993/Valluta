@@ -22,7 +22,7 @@ from game.models import (
 class QuestionInline(admin.TabularInline):
     model = Question
     extra = 0
-    fields = ("text", "answer")
+    fields = ("text", "image_url", "answer")
     show_change_link = True
 
 
@@ -47,9 +47,9 @@ class TopicAdmin(admin.ModelAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ("id", "topic_name", "text", "answer")
+    list_display = ("id", "topic_name", "text", "image_url", "answer")
     list_filter = ("topic",)
-    search_fields = ("text", "answer")
+    search_fields = ("text", "image_url", "answer")
     actions = ("import_questions_from_csv",)
     change_list_template = "admin/game/question/change_list.html"
 
@@ -86,7 +86,7 @@ class QuestionAdmin(admin.ModelAdmin):
                 return HttpResponseRedirect(request.path)
 
             reader = csv.DictReader(io.StringIO(decoded))
-            required_columns = {"topic", "question", "answer"}
+            required_columns = {"topic", "answer"}
             missing_columns = required_columns - set(reader.fieldnames or [])
             if missing_columns:
                 self.message_user(
@@ -105,20 +105,22 @@ class QuestionAdmin(admin.ModelAdmin):
                     for row_number, row in enumerate(reader, start=2):
                         topic_name = (row.get("topic") or "").strip()
                         question_text = (row.get("question") or "").strip()
+                        image_url = (row.get("image_url") or "").strip()
                         answer_text = (row.get("answer") or "").strip()
 
-                        if not topic_name and not question_text and not answer_text:
+                        if not topic_name and not question_text and not image_url and not answer_text:
                             continue
-                        if not topic_name or not question_text or not answer_text:
+                        if not topic_name or not answer_text or (not question_text and not image_url):
                             missing = [
                                 column
                                 for column, value in {
                                     "topic": topic_name,
-                                    "question": question_text,
                                     "answer": answer_text,
                                 }.items()
                                 if not value
                             ]
+                            if not question_text and not image_url:
+                                missing.append("question or image_url")
                             raise ValueError(
                                 f"Row {row_number} is missing values for: {', '.join(missing)}."
                             )
@@ -132,7 +134,12 @@ class QuestionAdmin(admin.ModelAdmin):
                             topic_cache[topic_name] = topic
 
                         questions_to_create.append(
-                            Question(topic=topic, text=question_text, answer=answer_text)
+                            Question(
+                                topic=topic,
+                                text=question_text,
+                                image_url=image_url,
+                                answer=answer_text,
+                            )
                         )
 
                     if not questions_to_create:

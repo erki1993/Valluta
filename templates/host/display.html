@@ -12,6 +12,12 @@
     <div class="battle-name">- vs -</div>
     <div class="battle-timers">00:00 · 00:00</div>
 </div>
+<section id="battle-question-screen" hidden aria-live="polite">
+    <div id="battle-question-card">
+        <img id="battle-question-image" alt="Current battle question" hidden>
+        <div id="battle-question-text" hidden>—</div>
+    </div>
+</section>
 <section id="battle-start-screen" hidden aria-live="polite">
     <div id="battle-start-card">
         <p id="battle-start-label">GET READY</p>
@@ -85,9 +91,9 @@
     }
     #battle-banner {
         position: fixed;
-        top: 50%;
+        top: 2rem;
         left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translateX(-50%);
         min-width: 44rem;
         max-width: 88vw;
         text-align: center;
@@ -97,6 +103,42 @@
         padding: 1.2rem 2.2rem;
         z-index: 100;
         box-shadow: 0 0 2.2rem rgba(0, 0, 0, 0.9);
+    }
+    #battle-question-screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 7rem 2rem 2rem;
+        z-index: 90;
+        pointer-events: none;
+    }
+    #battle-question-card {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: min(72rem, 100%);
+        max-height: calc(100vh - 9rem);
+        padding: 1.2rem;
+        border-radius: 1.4rem;
+        background: rgba(0, 0, 0, 0.86);
+        border: 0.28rem solid rgba(255, 230, 0, 0.65);
+        box-shadow: 0 0 2.2rem rgba(0, 0, 0, 0.85);
+    }
+    #battle-question-image {
+        display: block;
+        max-width: 100%;
+        max-height: calc(100vh - 12rem);
+        object-fit: contain;
+        border-radius: 0.9rem;
+    }
+    #battle-question-text {
+        font-size: clamp(2rem, 4vw, 4rem);
+        font-weight: 900;
+        text-align: center;
+        line-height: 1.1;
+        text-transform: uppercase;
     }
     #winner-screen {
         position: fixed;
@@ -228,6 +270,9 @@
     const battleBanner  = document.getElementById("battle-banner");
     const battleName    = battleBanner.querySelector(".battle-name");
     const battleTimers  = battleBanner.querySelector(".battle-timers");
+    const battleQuestionScreen = document.getElementById("battle-question-screen");
+    const battleQuestionImage = document.getElementById("battle-question-image");
+    const battleQuestionText = document.getElementById("battle-question-text");
     const battleStartScreen = document.getElementById("battle-start-screen");
     const battleStartAttacker = document.getElementById("battle-start-attacker");
     const battleStartDefender = document.getElementById("battle-start-defender");
@@ -299,6 +344,7 @@
 
     const renderBattle = (battle) => {
         battleBanner.hidden = true;
+        battleQuestionScreen.hidden = true;
         battleStartScreen.hidden = true;
         battleResultScreen.hidden = true;
         stopBattleTimer();
@@ -314,6 +360,13 @@
         } else if (battle.active) {
             battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
             battleBanner.hidden = false;
+            battleQuestionScreen.hidden = false;
+            const imageUrl = battle.question_image_url || "";
+            const fallbackText = battle.question_text || "";
+            battleQuestionImage.hidden = !imageUrl;
+            battleQuestionImage.src = imageUrl;
+            battleQuestionText.hidden = Boolean(imageUrl) || !fallbackText;
+            battleQuestionText.textContent = fallbackText || "—";
 
             battleTimerState = {
                 attackerMs: battle.attacker_timer_ms,
@@ -405,6 +458,7 @@
 
         ws.addEventListener("close", () => {
             stopBattleTimer();
+            battleQuestionScreen.hidden = true;
             battleBanner.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection closed";
@@ -412,11 +466,13 @@
 
         ws.addEventListener("error", () => {
             stopBattleTimer();
+            battleQuestionScreen.hidden = true;
             battleBanner.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection issue";
         });
     } else {
+        battleQuestionScreen.hidden = true;
         battleBanner.hidden = false;
         battleName.textContent = "Waiting for game state";
         battleTimers.textContent = "No active game";
