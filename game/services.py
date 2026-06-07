@@ -340,6 +340,7 @@ def ensure_current_question(battle: Battle) -> BattleQuestion | None:
     if unanswered_question is not None:
         return unanswered_question
 
+    # Always use the defender's topic for questions, regardless of whose turn it is.
     target_topic = battle.defender.topic
     if battle.current_turn == Battle.Turn.ATTACKER:
         asked_to = BattleQuestion.AskedTo.ATTACKER

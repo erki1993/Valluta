@@ -165,7 +165,7 @@ class BattleApiTests(TestCase):
         # Attacker won, so defender's topic must remain unchanged.
         self.assertEqual(self.battle.winner, self.attacker)
         self.assertTrue(self.defender.is_eliminated)
-        self.assertEqual(self.attacker.topic, self.topic_a)
+        self.assertEqual(self.defender.topic, self.topic_b)
 
     def test_battle_state_returns_active_battle_data(self):
         response = self.client.get("/api/battle/state/", {"game_id": self.game.id})
