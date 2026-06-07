@@ -1,6 +1,6 @@
 import csv
 import io
-import random
+import secrets
 
 from django.contrib import admin, messages
 from django.db import transaction
@@ -38,8 +38,8 @@ class PlayerAdmin(admin.ModelAdmin):
         return ("name", "color", "is_active")
 
     def save_model(self, request, obj, form, change):
-        if not obj.color:
-            obj.color = f"#{random.randint(0, 0xFFFFFF):06X}"
+        if not change and not obj.color:
+            obj.color = f"#{secrets.randbelow(0x1000000):06X}"
         super().save_model(request, obj, form, change)
 
 

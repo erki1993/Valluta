@@ -225,3 +225,17 @@ class PlayerAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         player = Player.objects.get(name="Alice")
         self.assertRegex(player.color, r"^#[0-9A-F]{6}$")
+
+    def test_change_player_keeps_existing_color(self):
+        player = Player.objects.create(name="Bob", color="#123ABC")
+
+        response = self.client.post(
+            reverse("admin:game_player_change", args=[player.pk]),
+            {"name": "Bobby", "color": "#123ABC", "is_active": "on", "_save": "Save"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        player.refresh_from_db()
+        self.assertEqual(player.name, "Bobby")
+        self.assertEqual(player.color, "#123ABC")
