@@ -103,6 +103,70 @@ class BattleApiTests(TestCase):
             order=0,
         )
 
+    def test_battle_state_includes_defender_topic(self):
+        response = self.client.get("/api/battle/state/", {"game_id": self.game.id})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["defender_topic"], "History")
+
+    def test_attacker_turn_question_uses_defender_topic(self):
+        # Mark the existing question as answered and leave no unanswered question so
+        # ensure_current_question will create a fresh one for the attacker's turn.
+        BattleQuestion.objects.filter(battle=self.battle).update(answered_correctly=True)
+        # Only question_b belongs to defender's topic (History).
+        response = self.client.get("/api/battle/state/", {"game_id": self.game.id})
+
+        self.assertEqual(response.status_code, 200)
+        new_bq = (
+            BattleQuestion.objects.filter(battle=self.battle, answered_correctly__isnull=True)
+            .select_related("question__topic")
+            .first()
+        )
+        self.assertIsNotNone(new_bq)
+        self.assertEqual(new_bq.asked_to, BattleQuestion.AskedTo.ATTACKER)
+        self.assertEqual(new_bq.question.topic, self.topic_b)
+
+    def test_defender_inherits_attacker_topic_when_attacker_loses(self):
+        self.battle.attacker_score = 0
+        self.battle.defender_score = 1
+        self.battle.turn_started_at = timezone.now() - timedelta(seconds=61)
+        self.battle.save(update_fields=["attacker_score", "defender_score", "turn_started_at"])
+
+        self.client.post(
+            "/api/battle/answer/",
+            data=json.dumps({"correct": False, "game_id": self.game.id}),
+            content_type="application/json",
+        )
+
+        self.attacker.refresh_from_db()
+        self.defender.refresh_from_db()
+        self.battle.refresh_from_db()
+        # Defender won, so defender's topic is replaced with the attacker's original topic.
+        self.assertEqual(self.battle.winner, self.defender)
+        self.assertTrue(self.attacker.is_eliminated)
+        self.assertEqual(self.defender.topic, self.topic_a)
+
+    def test_topic_unchanged_when_attacker_wins(self):
+        self.battle.attacker_score = 1
+        self.battle.defender_score = 0
+        self.battle.turn_started_at = timezone.now() - timedelta(seconds=61)
+        self.battle.save(update_fields=["attacker_score", "defender_score", "turn_started_at"])
+
+        self.client.post(
+            "/api/battle/answer/",
+            data=json.dumps({"correct": False, "game_id": self.game.id}),
+            content_type="application/json",
+        )
+
+        self.attacker.refresh_from_db()
+        self.defender.refresh_from_db()
+        self.battle.refresh_from_db()
+        # Attacker won, so defender's topic must remain unchanged.
+        self.assertEqual(self.battle.winner, self.attacker)
+        self.assertTrue(self.defender.is_eliminated)
+        self.assertEqual(self.defender.topic, self.topic_b)
+
     def test_battle_state_returns_active_battle_data(self):
         response = self.client.get("/api/battle/state/", {"game_id": self.game.id})
 
