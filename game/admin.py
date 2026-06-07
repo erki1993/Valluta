@@ -1,5 +1,6 @@
 import csv
 import io
+import random
 
 from django.contrib import admin, messages
 from django.db import transaction
@@ -26,9 +27,61 @@ class QuestionInline(admin.TabularInline):
     show_change_link = True
 
 
+def _create_lobby_game_for_players(players):
+    topics = list(Topic.objects.filter(questions__isnull=False).distinct().order_by("id"))
+    if not topics:
+        raise ValueError("Cannot create a game without at least one topic that has questions.")
+
+    shuffled_topics = topics[:]
+    random.shuffle(shuffled_topics)
+
+    with transaction.atomic():
+        game = Game.objects.create(status=Game.Status.LOBBY)
+        GamePlayer.objects.bulk_create(
+            [
+                GamePlayer(
+                    game=game,
+                    player=player,
+                    topic=shuffled_topics[index % len(shuffled_topics)],
+                )
+                for index, player in enumerate(players)
+            ]
+        )
+
+    return game
+
+
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "color", "is_active")
+    actions = ("create_game_with_selected_players",)
+
+    @admin.action(description="Create a new game with selected players")
+    def create_game_with_selected_players(self, request, queryset):
+        players = list(queryset.order_by("id"))
+        if not players:
+            self.message_user(request, "Please select at least one player.", level=messages.ERROR)
+            return None
+        if len(players) > 25:
+            self.message_user(
+                request,
+                "A game supports at most 25 players.",
+                level=messages.ERROR,
+            )
+            return None
+
+        try:
+            game = _create_lobby_game_for_players(players)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return None
+
+        self.message_user(
+            request,
+            f"Created lobby game {game.pk} with {len(players)} players.",
+            level=messages.SUCCESS,
+        )
+        return HttpResponseRedirect(reverse("admin:game_game_change", args=[game.pk]))
 
 
 @admin.register(Topic)
