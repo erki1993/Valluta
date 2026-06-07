@@ -154,6 +154,74 @@ class AdminConfigurationTests(TestCase):
         self.assertEqual(QuestionAdmin.list_filter, ("topic",))
         self.assertEqual(QuestionAdmin.search_fields, ("text", "answer"))
 
+    def test_player_admin_enables_create_game_action(self):
+        self.assertIn("create_game_with_selected_players", PlayerAdmin.actions)
+
+
+class PlayerAdminGameCreationTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create(
+            username="admin",
+            email="admin@example.com",
+            is_staff=True,
+            is_superuser=True,
+        )
+        user.set_password("admin-pass-123")
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+
+    def test_action_creates_lobby_game_from_selected_players(self):
+        topic_a = Topic.objects.create(name="Science")
+        topic_b = Topic.objects.create(name="History")
+        Question.objects.create(topic=topic_a, text="S1", answer="A1")
+        Question.objects.create(topic=topic_b, text="H1", answer="A2")
+        first = Player.objects.create(name="Alice", color="#FF5733")
+        second = Player.objects.create(name="Bob", color="#33A1FF")
+
+        with patch("game.admin.random.shuffle", side_effect=lambda values: None):
+            response = self.client.post(
+                reverse("admin:game_player_changelist"),
+                {
+                    "action": "create_game_with_selected_players",
+                    "_selected_action": [first.id, second.id],
+                    "index": 0,
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        game = Game.objects.get()
+        self.assertEqual(game.status, Game.Status.LOBBY)
+        self.assertEqual(game.game_players.count(), 2)
+        self.assertEqual(
+            list(
+                game.game_players.order_by("player__name").values_list(
+                    "player__name",
+                    "topic__name",
+                )
+            ),
+            [("Alice", "Science"), ("Bob", "History")],
+        )
+
+    def test_action_rejects_game_creation_without_topics_with_questions(self):
+        player = Player.objects.create(name="Alice", color="#FF5733")
+
+        response = self.client.post(
+            reverse("admin:game_player_changelist"),
+            {
+                "action": "create_game_with_selected_players",
+                "_selected_action": [player.id],
+                "index": 0,
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Cannot create a game without at least one topic that has questions.",
+        )
+        self.assertEqual(Game.objects.count(), 0)
+
 
 class QuestionCsvImportAdminTests(TestCase):
     def setUp(self):
