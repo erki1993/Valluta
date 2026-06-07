@@ -239,3 +239,16 @@ class PlayerAdminTests(TestCase):
         player.refresh_from_db()
         self.assertEqual(player.name, "Bobby")
         self.assertEqual(player.color, "#123ABC")
+
+    @patch("game.admin.secrets.randbelow", side_effect=[1, 2])
+    def test_add_player_retries_when_generated_color_already_exists(self, _randbelow):
+        Player.objects.create(name="Existing", color="#000001")
+
+        self.client.post(
+            reverse("admin:game_player_add"),
+            {"name": "New Player", "is_active": "on", "_save": "Save"},
+            follow=True,
+        )
+
+        player = Player.objects.get(name="New Player")
+        self.assertEqual(player.color, "#000002")

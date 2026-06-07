@@ -39,7 +39,10 @@ class PlayerAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and not obj.color:
-            obj.color = f"#{secrets.randbelow(0x1000000):06X}"
+            color = f"#{secrets.randbelow(0x1000000):06X}"
+            while Player.objects.filter(color=color).exists():
+                color = f"#{secrets.randbelow(0x1000000):06X}"
+            obj.color = color
         super().save_model(request, obj, form, change)
 
 
