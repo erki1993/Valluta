@@ -1,5 +1,7 @@
 import csv
 import io
+
+import secrets
 import random
 
 from django.contrib import admin, messages
@@ -54,7 +56,24 @@ def _create_lobby_game_for_players(players):
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "color", "is_active")
+    readonly_fields = ("color",)
     actions = ("create_game_with_selected_players",)
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            return ("name", "is_active")
+        return ("name", "color", "is_active")
+
+    def save_model(self, request, obj, form, change):
+        if not change and not obj.color:
+            max_attempts = 20
+            color = None
+            for _ in range(max_attempts):
+                color = f"#{secrets.randbelow(0x1000000):06X}"
+                if not Player.objects.filter(color=color).exists():
+                    break
+            obj.color = color
+        super().save_model(request, obj, form, change)
 
     @admin.action(description="Create a new game with selected players")
     def create_game_with_selected_players(self, request, queryset):

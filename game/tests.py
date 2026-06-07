@@ -1,6 +1,7 @@
 from io import StringIO
 from unittest.mock import patch
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -140,6 +141,10 @@ class SeedDemoCommandTests(TestCase):
 
 
 class AdminConfigurationTests(TestCase):
+    def test_player_admin_hides_color_on_add_form(self):
+        player_admin = PlayerAdmin(Player, admin.site)
+        self.assertEqual(player_admin.get_fields(request=None, obj=None), ("name", "is_active"))
+
     def test_topic_admin_lists_question_count_and_inline_questions(self):
         self.assertIn("question_count", TopicAdmin.list_display)
         self.assertIn(QuestionInline, TopicAdmin.inlines)
@@ -264,3 +269,55 @@ class QuestionCsvImportAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Missing CSV columns: answer.")
         self.assertEqual(Question.objects.count(), 0)
+
+
+class PlayerAdminTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create(
+            username="admin-player",
+            email="admin-player@example.com",
+            is_staff=True,
+            is_superuser=True,
+        )
+        user.set_password("admin-pass-123")
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+
+    def test_add_player_in_admin_auto_generates_color(self):
+        response = self.client.post(
+            reverse("admin:game_player_add"),
+            {"name": "Alice", "is_active": "on", "_save": "Save"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        player = Player.objects.get(name="Alice")
+        self.assertRegex(player.color, r"^#[0-9A-F]{6}$")
+
+    def test_change_player_keeps_existing_color(self):
+        player = Player.objects.create(name="Bob", color="#123ABC")
+
+        response = self.client.post(
+            reverse("admin:game_player_change", args=[player.pk]),
+            {"name": "Bobby", "color": "#123ABC", "is_active": "on", "_save": "Save"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        player.refresh_from_db()
+        self.assertEqual(player.name, "Bobby")
+        self.assertEqual(player.color, "#123ABC")
+
+    @patch("game.admin.secrets.randbelow", side_effect=[1, 2])
+    def test_add_player_retries_when_generated_color_already_exists(self, mock_randbelow):
+        Player.objects.create(name="Existing", color="#000001")
+
+        self.client.post(
+            reverse("admin:game_player_add"),
+            {"name": "New Player", "is_active": "on", "_save": "Save"},
+            follow=True,
+        )
+
+        player = Player.objects.get(name="New Player")
+        self.assertEqual(mock_randbelow.call_count, 2)
+        self.assertEqual(player.color, "#000002")
