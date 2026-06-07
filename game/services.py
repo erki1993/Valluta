@@ -145,7 +145,7 @@ def _assign_contiguous_regions(active_game_players: list, rows: int = 5, cols: i
     player_cells: list[set] = [set(k for k, v in owner.items() if v == i) for i in range(n)]
     counts = [len(c) for c in player_cells]
 
-    def _player_adjacency() -> dict:
+    def _player_adjacency() -> dict[int, set]:
         adj: dict[int, set] = defaultdict(set)
         for (r, c), pi in owner.items():
             for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
@@ -181,7 +181,11 @@ def _assign_contiguous_regions(active_game_players: list, rows: int = 5, cols: i
                     queue.append((nb, path + [nb]))
         return None
 
-    for _ in range(300):
+    # Upper bound on balancing iterations: each iteration transfers at least one
+    # cell, and at most `total` cells ever need moving, so this limit is generous
+    # while still preventing an infinite loop in degenerate cases.
+    _MAX_BALANCING_ITERATIONS = total * 2
+    for _ in range(_MAX_BALANCING_ITERATIONS):
         overs = [i for i in range(n) if counts[i] > quotas[i]]
         unders = [i for i in range(n) if counts[i] < quotas[i]]
         if not overs or not unders:
