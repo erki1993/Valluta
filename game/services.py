@@ -340,11 +340,10 @@ def ensure_current_question(battle: Battle) -> BattleQuestion | None:
     if unanswered_question is not None:
         return unanswered_question
 
+    target_topic = battle.defender.topic
     if battle.current_turn == Battle.Turn.ATTACKER:
-        target_topic = battle.attacker.topic
         asked_to = BattleQuestion.AskedTo.ATTACKER
     else:
-        target_topic = battle.defender.topic
         asked_to = BattleQuestion.AskedTo.DEFENDER
 
     asked_question_ids = battle.battle_questions.values_list("question_id", flat=True)
@@ -382,6 +381,11 @@ def resolve_battle(battle: Battle) -> Battle:
     Square.objects.filter(game=battle.game, owner=loser).update(owner=winner)
     loser.is_eliminated = True
     loser.save(update_fields=["is_eliminated"])
+
+    if winner == battle.defender:
+        # Attacker lost: defender inherits the attacker's topic
+        winner.topic = loser.topic
+        winner.save(update_fields=["topic"])
 
     battle.status = Battle.Status.FINISHED
     battle.winner = winner

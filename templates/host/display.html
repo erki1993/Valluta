@@ -10,6 +10,7 @@
 </div>
 <div id="battle-banner" hidden aria-live="polite">
     <div class="battle-name">- vs -</div>
+    <div class="battle-topic"></div>
     <div class="battle-timers">00:00 · 00:00</div>
 </div>
 <section id="battle-question-screen" hidden aria-live="polite">
@@ -26,6 +27,7 @@
             <span id="battle-start-vs">vs</span>
             <span id="battle-start-defender">—</span>
         </div>
+        <div id="battle-start-topic"></div>
     </div>
 </section>
 <section id="battle-result-screen" hidden aria-live="polite">
@@ -187,6 +189,22 @@
         color: #ffe600;
         font-weight: 900;
     }
+    .battle-topic {
+        margin-top: 0.3rem;
+        font-size: clamp(1rem, 2vw, 2rem);
+        color: #94a3b8;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    #battle-start-topic {
+        margin-top: 1rem;
+        font-size: clamp(1rem, 2.2vw, 2.2rem);
+        color: #94a3b8;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
     #battle-start-screen, #battle-result-screen {
         position: fixed;
         inset: 0;
@@ -270,6 +288,7 @@
     const playersList = document.getElementById("players-list");
     const battleBanner  = document.getElementById("battle-banner");
     const battleName    = battleBanner.querySelector(".battle-name");
+    const battleTopicEl = battleBanner.querySelector(".battle-topic");
     const battleTimers  = battleBanner.querySelector(".battle-timers");
     const battleQuestionScreen = document.getElementById("battle-question-screen");
     const battleQuestionImage = document.getElementById("battle-question-image");
@@ -277,6 +296,7 @@
     const battleStartScreen = document.getElementById("battle-start-screen");
     const battleStartAttacker = document.getElementById("battle-start-attacker");
     const battleStartDefender = document.getElementById("battle-start-defender");
+    const battleStartTopic = document.getElementById("battle-start-topic");
     const battleResultScreen = document.getElementById("battle-result-screen");
     const battleResultWinner = document.getElementById("battle-result-winner");
     const battleResultLoser = document.getElementById("battle-result-loser");
@@ -384,9 +404,11 @@
             battleStartAttacker.style.color = battle.attacker.color || "#fff";
             battleStartDefender.textContent = battle.defender.name;
             battleStartDefender.style.color = battle.defender.color || "#fff";
+            battleStartTopic.textContent = battle.defender_topic ? `Topic: ${battle.defender_topic}` : "";
             battleStartScreen.hidden = false;
         } else if (battle.active) {
             battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
+            battleTopicEl.textContent = battle.defender_topic ? `Topic: ${battle.defender_topic}` : "";
             battleBanner.hidden = false;
             battleQuestionScreen.hidden = false;
             const imageUrl = battle.question_image_url || "";

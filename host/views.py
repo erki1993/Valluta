@@ -102,6 +102,7 @@ def _serialize_battle_state(battle: Battle | None) -> dict:
             "score": battle.defender_score,
             "is_current_turn": battle.current_turn == Battle.Turn.DEFENDER,
         },
+        "defender_topic": battle.defender.topic.name,
         "question_text": question.text if question else "",
         "question_image_url": question.image_url if question else "",
         "answer_text": question.answer if question else "",
@@ -216,6 +217,7 @@ def _serialize_game_state(game: Game | None) -> dict:
             "question_text": question.text if question else "",
             "question_image_url": question.image_url if question else "",
             "answer_text": question.answer if question else "",
+            "defender_topic": battle.defender.topic.name,
             "highlight_squares": highlight_squares,
         }
 
