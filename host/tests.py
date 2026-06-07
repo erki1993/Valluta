@@ -34,6 +34,8 @@ class DisplayViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="game-grid"')
+        self.assertContains(response, 'id="battle-question-screen"')
+        self.assertContains(response, 'id="battle-question-image"')
         self.assertContains(response, "VÕITJA!")
         self.assertContains(response, "canvas-confetti")
         self.assertContains(response, "ws/game/")
@@ -85,6 +87,7 @@ class BattleApiTests(TestCase):
         self.question_a = Question.objects.create(
             topic=self.topic_a,
             text="What is H2O?",
+            image_url="https://example.com/science.png",
             answer="Water",
         )
         self.question_b = Question.objects.create(
@@ -109,6 +112,8 @@ class BattleApiTests(TestCase):
         self.assertEqual(payload["attacker"]["name"], "Alice")
         self.assertEqual(payload["defender"]["name"], "Bob")
         self.assertEqual(payload["question_text"], "What is H2O?")
+        self.assertEqual(payload["question_image_url"], "https://example.com/science.png")
+        self.assertEqual(payload["answer_text"], "Water")
         self.assertEqual(payload["attacker"]["time_remaining"], "01:00")
 
     def test_correct_answer_adds_score_switches_turn_and_creates_next_question(self):

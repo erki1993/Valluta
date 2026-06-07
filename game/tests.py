@@ -151,8 +151,9 @@ class AdminConfigurationTests(TestCase):
 
     def test_question_admin_enables_topic_filter_and_search(self):
         self.assertIn("topic_name", QuestionAdmin.list_display)
+        self.assertIn("image_url", QuestionAdmin.list_display)
         self.assertEqual(QuestionAdmin.list_filter, ("topic",))
-        self.assertEqual(QuestionAdmin.search_fields, ("text", "answer"))
+        self.assertEqual(QuestionAdmin.search_fields, ("text", "image_url", "answer"))
 
     def test_player_admin_enables_create_game_action(self):
         self.assertIn("create_game_with_selected_players", PlayerAdmin.actions)
@@ -238,7 +239,11 @@ class QuestionCsvImportAdminTests(TestCase):
     def test_import_csv_creates_topics_and_questions(self):
         csv_file = SimpleUploadedFile(
             "questions.csv",
-            b"topic,question,answer\nScience,What is H2O?,Water\nHistory,First president?,Washington\n",
+            (
+                b"topic,image_url,answer\n"
+                b"Science,https://example.com/h2o.png,Water\n"
+                b"History,https://example.com/president.png,Washington\n"
+            ),
             content_type="text/csv",
         )
 
@@ -252,6 +257,32 @@ class QuestionCsvImportAdminTests(TestCase):
         self.assertEqual(Topic.objects.filter(name="Science").count(), 1)
         self.assertEqual(Topic.objects.filter(name="History").count(), 1)
         self.assertEqual(Question.objects.count(), 2)
+        self.assertEqual(
+            list(Question.objects.order_by("id").values_list("text", "image_url", "answer")),
+            [
+                ("", "https://example.com/h2o.png", "Water"),
+                ("", "https://example.com/president.png", "Washington"),
+            ],
+        )
+
+    def test_import_csv_supports_text_only_questions(self):
+        csv_file = SimpleUploadedFile(
+            "questions.csv",
+            b"topic,question,answer\nScience,What is H2O?,Water\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            reverse("admin:game_question_import_csv"),
+            {"csv_file": csv_file},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(Question.objects.values_list("text", "image_url", "answer")),
+            [("What is H2O?", "", "Water")],
+        )
 
     def test_import_csv_rejects_missing_required_columns(self):
         csv_file = SimpleUploadedFile(

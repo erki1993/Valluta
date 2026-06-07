@@ -80,6 +80,7 @@ def _serialize_battle_state(battle: Battle | None) -> dict:
         .order_by("order", "id")
         .first()
     )
+    question = current_question.question if current_question else None
 
     return {
         "active": battle.status == Battle.Status.ACTIVE,
@@ -101,7 +102,9 @@ def _serialize_battle_state(battle: Battle | None) -> dict:
             "score": battle.defender_score,
             "is_current_turn": battle.current_turn == Battle.Turn.DEFENDER,
         },
-        "question_text": current_question.question.text if current_question else "",
+        "question_text": question.text if question else "",
+        "question_image_url": question.image_url if question else "",
+        "answer_text": question.answer if question else "",
     }
 
 
@@ -179,6 +182,7 @@ def _serialize_game_state(game: Game | None) -> dict:
                 {"row": attacker_square.row, "col": attacker_square.col, "role": "attacker"},
             )
 
+        question = current_question.question if current_question else None
         battle_payload = {
             "active": battle.status == Battle.Status.ACTIVE,
             "battle_id": battle.id,
@@ -209,7 +213,9 @@ def _serialize_game_state(game: Game | None) -> dict:
                 "score": battle.defender_score,
                 "is_current_turn": battle.current_turn == Battle.Turn.DEFENDER,
             },
-            "question_text": current_question.question.text if current_question else "",
+            "question_text": question.text if question else "",
+            "question_image_url": question.image_url if question else "",
+            "answer_text": question.answer if question else "",
             "highlight_squares": highlight_squares,
         }
 

@@ -176,6 +176,14 @@
         font-size: 1rem;
         min-height: 2.2rem;
     }
+    #battle-question-label {
+        margin: 0 0 0.35rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #475569;
+    }
 
     #answer-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
     #answer-buttons button {
@@ -265,6 +273,7 @@
                     <div class="card-score">Score: <span id="defender-score">0</span></div>
                 </div>
             </div>
+            <p id="battle-question-label">Answer</p>
             <div id="battle-question-box" aria-live="polite">—</div>
             <div id="answer-buttons">
                 <button id="correct-btn" type="button" disabled>✓ Correct</button>
@@ -502,7 +511,7 @@
             defenderName.textContent = battle.defender.name;
             attackerScore.textContent = battle.attacker.score;
             defenderScore.textContent = battle.defender.score;
-            battleQuestionBox.textContent = battle.question_text || "—";
+            battleQuestionBox.textContent = battle.answer_text || battle.question_text || "—";
             attackerCard.classList.toggle("turn-active", battle.attacker.is_current_turn);
             defenderCard.classList.toggle("turn-active", battle.defender.is_current_turn);
             correctBtn.disabled = false;
