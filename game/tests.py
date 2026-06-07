@@ -241,7 +241,7 @@ class PlayerAdminTests(TestCase):
         self.assertEqual(player.color, "#123ABC")
 
     @patch("game.admin.secrets.randbelow", side_effect=[1, 2])
-    def test_add_player_retries_when_generated_color_already_exists(self, _randbelow):
+    def test_add_player_retries_when_generated_color_already_exists(self, mock_randbelow):
         Player.objects.create(name="Existing", color="#000001")
 
         self.client.post(
@@ -251,4 +251,5 @@ class PlayerAdminTests(TestCase):
         )
 
         player = Player.objects.get(name="New Player")
+        self.assertEqual(mock_randbelow.call_count, 2)
         self.assertEqual(player.color, "#000002")
