@@ -69,11 +69,11 @@
         display: grid;
         grid-template-columns: repeat(5, 1fr);
         grid-template-rows: repeat(5, 1fr);
-        gap: 0.65rem;
+        gap: 0;
     }
     .grid-square {
-        border-radius: 0.6rem;
-        border: 0.32rem solid rgba(0, 0, 0, 0.6);
+        border-radius: 0;
+        border: 0.45rem solid #050505;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -83,7 +83,6 @@
         line-height: 1.1;
         font-weight: 900;
         text-shadow: 0 0.15rem 0.4rem rgba(0, 0, 0, 0.85);
-        box-shadow: inset 0 0 0.5rem rgba(0, 0, 0, 0.35);
     }
     .battle-highlight {
         animation: battlePulse 1s infinite;
@@ -263,6 +262,8 @@
 <script>
     const GRID_SIZE = 5;
     const NEUTRAL_COLOR = "#555555";
+    const GAP_COLOR = "#050505";
+    const BLOB_RADIUS = "0.75rem";
     const DEFAULT_WINNER_COLOR = "#ffe600";
     const tvLayout = document.getElementById("tv-layout");
     const gameGrid = document.getElementById("game-grid");
@@ -335,9 +336,35 @@
             for (let col = 0; col < GRID_SIZE; col += 1) {
                 const square = squaresByKey.get(`${row}:${col}`);
                 const squareEl = gameGrid.children[(row * GRID_SIZE) + col];
-                squareEl.style.backgroundColor = square && square.owner_color ? square.owner_color : NEUTRAL_COLOR;
-                squareEl.textContent = square && square.owner_name ? square.owner_name : "";
+                const ownerColor = square?.owner_color || null;
+                const color = ownerColor || NEUTRAL_COLOR;
+
+                squareEl.style.backgroundColor = color;
+                squareEl.textContent = square?.owner_name || "";
                 squareEl.classList.toggle("battle-highlight", highlightedSquares.has(`${row}:${col}`));
+
+                // Blob merging: adjacent cells with the same owner share a border
+                // of their own color so the gap disappears and they form one shape.
+                const topColor = squaresByKey.get(`${row - 1}:${col}`)?.owner_color || null;
+                const rightColor = squaresByKey.get(`${row}:${col + 1}`)?.owner_color || null;
+                const bottomColor = squaresByKey.get(`${row + 1}:${col}`)?.owner_color || null;
+                const leftColor = squaresByKey.get(`${row}:${col - 1}`)?.owner_color || null;
+
+                const mergeTop    = ownerColor !== null && ownerColor === topColor;
+                const mergeRight  = ownerColor !== null && ownerColor === rightColor;
+                const mergeBottom = ownerColor !== null && ownerColor === bottomColor;
+                const mergeLeft   = ownerColor !== null && ownerColor === leftColor;
+
+                squareEl.style.borderTopColor    = mergeTop    ? color : GAP_COLOR;
+                squareEl.style.borderRightColor  = mergeRight  ? color : GAP_COLOR;
+                squareEl.style.borderBottomColor = mergeBottom ? color : GAP_COLOR;
+                squareEl.style.borderLeftColor   = mergeLeft   ? color : GAP_COLOR;
+
+                // Round only the convex outer corners of each territory.
+                squareEl.style.borderTopLeftRadius     = (!mergeTop    && !mergeLeft)   ? BLOB_RADIUS : "0";
+                squareEl.style.borderTopRightRadius    = (!mergeTop    && !mergeRight)  ? BLOB_RADIUS : "0";
+                squareEl.style.borderBottomRightRadius = (!mergeBottom && !mergeRight)  ? BLOB_RADIUS : "0";
+                squareEl.style.borderBottomLeftRadius  = (!mergeBottom && !mergeLeft)   ? BLOB_RADIUS : "0";
             }
         }
     };

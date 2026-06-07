@@ -1,4 +1,5 @@
 import random
+from collections import defaultdict, deque
 
 from django.db import transaction
 from django.db.models import Max
@@ -59,6 +60,151 @@ def check_game_over(game_id: int) -> GamePlayer | None:
     return winner
 
 
+def _assign_contiguous_regions(active_game_players: list, rows: int = 5, cols: int = 5) -> dict:
+    """Partition a rows×cols grid into contiguous regions, one per player.
+
+    Phase 1 – BFS flood-fill from maximally-spread seed positions to guarantee
+    every player gets a fully-connected territory.
+    Phase 2 – Border-swap balancing: cells are moved from over-quota players to
+    under-quota players (along shared borders, preserving contiguity) until
+    quotas are met or no further swaps are possible.  When two players don't
+    share a direct border a chain transfer is attempted through intermediate
+    players.
+
+    Returns a dict mapping (row, col) -> GamePlayer.
+    """
+    n = len(active_game_players)
+    total = rows * cols
+    base = total // n
+    extra = total % n
+    quotas = [base + (1 if i < extra else 0) for i in range(n)]
+
+    # --- Phase 1: BFS flood-fill from spread-out seeds ---
+
+    def _spread_seeds() -> list:
+        all_cells = [(r, c) for r in range(rows) for c in range(cols)]
+        random.shuffle(all_cells)
+        selected = [all_cells[0]]
+        remaining = all_cells[1:]
+        while len(selected) < n:
+            best = max(remaining, key=lambda c: min(abs(c[0] - s[0]) + abs(c[1] - s[1]) for s in selected))
+            selected.append(best)
+            remaining.remove(best)
+        random.shuffle(selected)
+        return selected
+
+    seeds = _spread_seeds()
+    owner: dict[tuple, int] = {seed: i for i, seed in enumerate(seeds)}
+    frontiers: list[deque] = [deque([seed]) for seed in seeds]
+    unassigned = set((r, c) for r in range(rows) for c in range(cols)) - set(seeds)
+
+    while unassigned:
+        progress = False
+        for i in range(n):
+            while frontiers[i]:
+                r, c = frontiers[i][0]
+                neighbor = None
+                for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    nb = (r + dr, c + dc)
+                    if nb in unassigned:
+                        neighbor = nb
+                        break
+                if neighbor is not None:
+                    owner[neighbor] = i
+                    unassigned.discard(neighbor)
+                    frontiers[i].append(neighbor)
+                    progress = True
+                    break
+                else:
+                    frontiers[i].popleft()
+        if not progress:
+            break
+
+    # --- Phase 2: border-swap balancing ---
+
+    def _is_contiguous(cells_set: set) -> bool:
+        if not cells_set:
+            return True
+        start = next(iter(cells_set))
+        visited: set = {start}
+        stack = [start]
+        while stack:
+            r, c = stack.pop()
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                nb = (r + dr, c + dc)
+                if nb in cells_set and nb not in visited:
+                    visited.add(nb)
+                    stack.append(nb)
+        return visited == cells_set
+
+    def _is_removable(cells_set: set, cell: tuple) -> bool:
+        if len(cells_set) <= 1:
+            return False
+        return _is_contiguous(cells_set - {cell})
+
+    player_cells: list[set] = [set(k for k, v in owner.items() if v == i) for i in range(n)]
+    counts = [len(c) for c in player_cells]
+
+    def _player_adjacency() -> dict:
+        adj: dict[int, set] = defaultdict(set)
+        for (r, c), pi in owner.items():
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                nb = (r + dr, c + dc)
+                if nb in owner and owner[nb] != pi:
+                    adj[pi].add(owner[nb])
+        return adj
+
+    def _transfer_one(from_i: int, to_i: int) -> bool:
+        for cell in list(player_cells[from_i]):
+            r, c = cell
+            if any((r + dr, c + dc) in player_cells[to_i] for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1))):
+                if _is_removable(player_cells[from_i], cell):
+                    player_cells[from_i].discard(cell)
+                    player_cells[to_i].add(cell)
+                    owner[cell] = to_i
+                    counts[from_i] -= 1
+                    counts[to_i] += 1
+                    return True
+        return False
+
+    def _find_path(src: int, dst: int) -> list | None:
+        adj = _player_adjacency()
+        queue: deque = deque([(src, [src])])
+        visited: set = {src}
+        while queue:
+            node, path = queue.popleft()
+            if node == dst:
+                return path
+            for nb in adj[node]:
+                if nb not in visited:
+                    visited.add(nb)
+                    queue.append((nb, path + [nb]))
+        return None
+
+    for _ in range(300):
+        overs = [i for i in range(n) if counts[i] > quotas[i]]
+        unders = [i for i in range(n) if counts[i] < quotas[i]]
+        if not overs or not unders:
+            break
+        transferred = False
+        for oi in overs:
+            for ui in unders:
+                if _transfer_one(oi, ui):
+                    transferred = True
+                    break
+                path = _find_path(oi, ui)
+                if path and len(path) > 1:
+                    if all(_transfer_one(path[k], path[k + 1]) for k in range(len(path) - 1)):
+                        transferred = True
+                        break
+            if transferred:
+                break
+        if not transferred:
+            break
+
+    return {cell: active_game_players[i] for cell, i in owner.items()}
+
+
 def start_game(game_id: int) -> None:
     game = Game.objects.get(pk=game_id)
     game.status = Game.Status.ACTIVE
@@ -74,7 +220,7 @@ def start_game(game_id: int) -> None:
     if not active_game_players:
         return
 
-    # Create 25 squares fresh and distribute ALL evenly among players.
+    # Create 25 squares fresh and distribute them in contiguous regions.
     game.squares.all().delete()
     Square.objects.bulk_create([
         Square(game=game, row=row, col=col)
@@ -82,20 +228,15 @@ def start_game(game_id: int) -> None:
         for col in range(5)
     ])
 
-    all_squares = list(game.squares.all())
-    random.shuffle(all_squares)
+    cell_to_player = _assign_contiguous_regions(active_game_players)
 
-    n = len(active_game_players)
-    base = 25 // n
-    extra = 25 % n
+    all_squares = list(game.squares.all())
     to_update = []
-    idx = 0
-    for i, gp in enumerate(active_game_players):
-        count = base + (1 if i < extra else 0)
-        for sq in all_squares[idx: idx + count]:
+    for sq in all_squares:
+        gp = cell_to_player.get((sq.row, sq.col))
+        if gp is not None:
             sq.owner = gp
             to_update.append(sq)
-        idx += count
     Square.objects.bulk_update(to_update, ["owner"])
 
 
