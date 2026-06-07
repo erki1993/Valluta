@@ -14,34 +14,53 @@ from game.services import check_game_over, start_game
 
 
 class StartGameTests(TestCase):
-    def test_start_game_activates_game_and_returns_random_active_player(self):
+    def _are_squares_contiguous(self, squares):
+        """Return True when all squares form a single connected region."""
+        if not squares:
+            return True
+        coords = {(sq.row, sq.col) for sq in squares}
+        start = next(iter(coords))
+        visited = {start}
+        queue = [start]
+        while queue:
+            r, c = queue.pop()
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                nb = (r + dr, c + dc)
+                if nb in coords and nb not in visited:
+                    visited.add(nb)
+                    queue.append(nb)
+        return visited == coords
+
+    def test_start_game_activates_game_and_assigns_contiguous_regions(self):
         game = Game.objects.create()
         science = Topic.objects.create(name="Science")
-        active_player = Player.objects.create(name="Alice", color="#FF5733")
+        alice = Player.objects.create(name="Alice", color="#FF5733")
+        bob = Player.objects.create(name="Bob", color="#33A1FF")
         inactive_player = Player.objects.create(
-            name="Bob",
-            color="#33A1FF",
+            name="Charlie",
+            color="#7D3C98",
             is_active=False,
         )
-        expected_game_player = GamePlayer.objects.create(
-            game=game,
-            player=active_player,
-            topic=science,
-        )
-        GamePlayer.objects.create(
-            game=game,
-            player=inactive_player,
-            topic=science,
-        )
+        alice_gp = GamePlayer.objects.create(game=game, player=alice, topic=science)
+        bob_gp = GamePlayer.objects.create(game=game, player=bob, topic=science)
+        GamePlayer.objects.create(game=game, player=inactive_player, topic=science)
 
-        with patch("game.services.random.choice", return_value=expected_game_player):
-            selected_game_player = start_game(game.id)
+        start_game(game.id)
 
         game.refresh_from_db()
         self.assertEqual(game.status, Game.Status.ACTIVE)
-        self.assertEqual(selected_game_player, expected_game_player)
 
-    def test_start_game_returns_none_when_no_active_players_exist(self):
+        squares = list(Square.objects.filter(game=game))
+        self.assertEqual(len(squares), 25)
+        self.assertTrue(all(sq.owner_id is not None for sq in squares))
+
+        alice_squares = [sq for sq in squares if sq.owner_id == alice_gp.id]
+        bob_squares = [sq for sq in squares if sq.owner_id == bob_gp.id]
+        self.assertEqual(len(alice_squares) + len(bob_squares), 25)
+        self.assertTrue(self._are_squares_contiguous(alice_squares))
+        self.assertTrue(self._are_squares_contiguous(bob_squares))
+
+    def test_start_game_does_not_create_squares_when_no_active_players_exist(self):
         game = Game.objects.create()
         science = Topic.objects.create(name="Science")
         inactive_player = Player.objects.create(
@@ -56,11 +75,11 @@ class StartGameTests(TestCase):
             is_eliminated=True,
         )
 
-        selected_game_player = start_game(game.id)
+        start_game(game.id)
 
         game.refresh_from_db()
         self.assertEqual(game.status, Game.Status.ACTIVE)
-        self.assertIsNone(selected_game_player)
+        self.assertEqual(Square.objects.filter(game=game).count(), 0)
 
 
 class CheckGameOverTests(TestCase):
