@@ -294,6 +294,7 @@
     const battleQuestionImage = document.getElementById("battle-question-image");
     const battleQuestionText = document.getElementById("battle-question-text");
     const battleStartScreen = document.getElementById("battle-start-screen");
+    const battleStartPlayers = document.getElementById("battle-start-players");
     const battleStartAttacker = document.getElementById("battle-start-attacker");
     const battleStartDefender = document.getElementById("battle-start-defender");
     const battleStartTopic = document.getElementById("battle-start-topic");
@@ -343,11 +344,81 @@
         }
     };
 
+    const getConnectedOwnerLabelAnchors = (squaresByKey) => {
+        const visited = new Set();
+        const anchors = [];
+        const directions = [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+        ];
+
+        for (const [key, square] of squaresByKey.entries()) {
+            const ownerId = square.owner_game_player_id;
+            if (!ownerId || visited.has(key)) continue;
+
+            const component = [];
+            const queue = [key];
+            let queueIndex = 0;
+            visited.add(key);
+
+            while (queueIndex < queue.length) {
+                const currentKey = queue[queueIndex];
+                queueIndex += 1;
+                const currentSquare = squaresByKey.get(currentKey);
+                if (!currentSquare || currentSquare.owner_game_player_id !== ownerId) continue;
+
+                component.push(currentSquare);
+
+                for (const [dr, dc] of directions) {
+                    const neighborKey = `${currentSquare.row + dr}:${currentSquare.col + dc}`;
+                    const neighborSquare = squaresByKey.get(neighborKey);
+                    if (!neighborSquare || neighborSquare.owner_game_player_id !== ownerId || visited.has(neighborKey)) {
+                        continue;
+                    }
+                    visited.add(neighborKey);
+                    queue.push(neighborKey);
+                }
+            }
+
+            if (!component.length) continue;
+
+            const componentSize = component.length;
+            const avgRow = component.reduce((sum, cell) => sum + cell.row, 0) / componentSize;
+            const avgCol = component.reduce((sum, cell) => sum + cell.col, 0) / componentSize;
+            let anchor = component[0];
+            let bestDistance = Math.abs(anchor.row - avgRow) + Math.abs(anchor.col - avgCol);
+            for (let index = 1; index < componentSize; index += 1) {
+                const candidate = component[index];
+                const candidateDistance = Math.abs(candidate.row - avgRow) + Math.abs(candidate.col - avgCol);
+                const isBetter = candidateDistance < bestDistance
+                    || (
+                        candidateDistance === bestDistance
+                        && (candidate.row < anchor.row || (candidate.row === anchor.row && candidate.col < anchor.col))
+                    );
+                if (isBetter) {
+                    anchor = candidate;
+                    bestDistance = candidateDistance;
+                }
+            }
+
+            anchors.push({
+                row: anchor.row,
+                col: anchor.col,
+                label: anchor.owner_name || "",
+            });
+        }
+
+        return anchors;
+    };
+
     const renderSquares = (state) => {
         ensureGrid();
         const squaresByKey = new Map(
             (state.squares || []).map((square) => [`${square.row}:${square.col}`, square])
         );
+        const labelAnchors = getConnectedOwnerLabelAnchors(squaresByKey);
         const highlightedSquares = new Set(
             (state.battle?.highlight_squares || []).map((square) => `${square.row}:${square.col}`)
         );
@@ -360,7 +431,7 @@
                 const color = ownerColor || NEUTRAL_COLOR;
 
                 squareEl.style.backgroundColor = color;
-                squareEl.textContent = square?.owner_name || "";
+                squareEl.textContent = "";
                 squareEl.classList.toggle("battle-highlight", highlightedSquares.has(`${row}:${col}`));
 
                 // Blob merging: adjacent cells with the same owner share a border
@@ -388,6 +459,13 @@
                 squareEl.style.borderBottomLeftRadius  = (!mergeBottom && !mergeLeft)   ? BLOB_RADIUS : "0";
             }
         }
+
+        for (const { row, col, label } of labelAnchors) {
+            const squareEl = gameGrid.children[(row * GRID_SIZE) + col];
+            if (squareEl) {
+                squareEl.textContent = label;
+            }
+        }
     };
 
     const renderBattle = (battle) => {
@@ -395,20 +473,19 @@
         battleQuestionScreen.hidden = true;
         battleStartScreen.hidden = true;
         battleResultScreen.hidden = true;
+        battleName.hidden = false;
+        battleStartPlayers.hidden = false;
         stopBattleTimer();
 
         if (!battle) return;
 
         if (battle.status === "pending") {
-            battleStartAttacker.textContent = battle.attacker.name;
-            battleStartAttacker.style.color = battle.attacker.color || "#fff";
-            battleStartDefender.textContent = battle.defender.name;
-            battleStartDefender.style.color = battle.defender.color || "#fff";
-            battleStartTopic.textContent = battle.defender_topic ? `Topic: ${battle.defender_topic}` : "";
+            battleStartPlayers.hidden = true;
+            battleStartTopic.textContent = battle.defender_topic || "";
             battleStartScreen.hidden = false;
         } else if (battle.active) {
-            battleName.textContent = `${battle.attacker_name} vs ${battle.defender_name}`;
-            battleTopicEl.textContent = battle.defender_topic ? `Topic: ${battle.defender_topic}` : "";
+            battleName.hidden = true;
+            battleTopicEl.textContent = battle.defender_topic || "";
             battleBanner.hidden = false;
             battleQuestionScreen.hidden = false;
             const imageUrl = battle.question_image_url || "";
@@ -510,6 +587,7 @@
             stopBattleTimer();
             battleQuestionScreen.hidden = true;
             battleBanner.hidden = false;
+            battleName.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection closed";
         });
@@ -518,12 +596,14 @@
             stopBattleTimer();
             battleQuestionScreen.hidden = true;
             battleBanner.hidden = false;
+            battleName.hidden = false;
             battleName.textContent = "Waiting for game state";
             battleTimers.textContent = "Connection issue";
         });
     } else {
         battleQuestionScreen.hidden = true;
         battleBanner.hidden = false;
+        battleName.hidden = false;
         battleName.textContent = "Waiting for game state";
         battleTimers.textContent = "No active game";
     }
