@@ -346,7 +346,7 @@
 
     const getConnectedOwnerLabelAnchors = (squaresByKey) => {
         const visited = new Set();
-        const anchorsByKey = new Map();
+        const anchors = [];
         const directions = [
             [-1, 0],
             [1, 0],
@@ -355,15 +355,17 @@
         ];
 
         for (const [key, square] of squaresByKey.entries()) {
-            const ownerId = square?.owner_game_player_id;
+            const ownerId = square.owner_game_player_id;
             if (!ownerId || visited.has(key)) continue;
 
             const component = [];
             const queue = [key];
+            let queueIndex = 0;
             visited.add(key);
 
-            while (queue.length) {
-                const currentKey = queue.shift();
+            while (queueIndex < queue.length) {
+                const currentKey = queue[queueIndex];
+                queueIndex += 1;
                 const currentSquare = squaresByKey.get(currentKey);
                 if (!currentSquare || currentSquare.owner_game_player_id !== ownerId) continue;
 
@@ -382,22 +384,33 @@
 
             if (!component.length) continue;
 
-            const avgRow = component.reduce((sum, cell) => sum + cell.row, 0) / component.length;
-            const avgCol = component.reduce((sum, cell) => sum + cell.col, 0) / component.length;
-            const anchor = component
-                .slice()
-                .sort((a, b) => {
-                    const aDistance = Math.abs(a.row - avgRow) + Math.abs(a.col - avgCol);
-                    const bDistance = Math.abs(b.row - avgRow) + Math.abs(b.col - avgCol);
-                    if (aDistance !== bDistance) return aDistance - bDistance;
-                    if (a.row !== b.row) return a.row - b.row;
-                    return a.col - b.col;
-                })[0];
+            const componentSize = component.length;
+            const avgRow = component.reduce((sum, cell) => sum + cell.row, 0) / componentSize;
+            const avgCol = component.reduce((sum, cell) => sum + cell.col, 0) / componentSize;
+            let anchor = component[0];
+            let bestDistance = Math.abs(anchor.row - avgRow) + Math.abs(anchor.col - avgCol);
+            for (let index = 1; index < componentSize; index += 1) {
+                const candidate = component[index];
+                const candidateDistance = Math.abs(candidate.row - avgRow) + Math.abs(candidate.col - avgCol);
+                const isBetter = candidateDistance < bestDistance
+                    || (
+                        candidateDistance === bestDistance
+                        && (candidate.row < anchor.row || (candidate.row === anchor.row && candidate.col < anchor.col))
+                    );
+                if (isBetter) {
+                    anchor = candidate;
+                    bestDistance = candidateDistance;
+                }
+            }
 
-            anchorsByKey.set(`${anchor.row}:${anchor.col}`, anchor.owner_name || "");
+            anchors.push({
+                row: anchor.row,
+                col: anchor.col,
+                label: anchor.owner_name || "",
+            });
         }
 
-        return anchorsByKey;
+        return anchors;
     };
 
     const renderSquares = (state) => {
@@ -447,8 +460,7 @@
             }
         }
 
-        for (const [squareKey, label] of labelAnchors.entries()) {
-            const [row, col] = squareKey.split(":").map(Number);
+        for (const { row, col, label } of labelAnchors) {
             const squareEl = gameGrid.children[(row * GRID_SIZE) + col];
             if (squareEl) {
                 squareEl.textContent = label;
