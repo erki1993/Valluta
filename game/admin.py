@@ -1,5 +1,6 @@
 import csv
 import io
+import random
 
 from django.contrib import admin, messages
 from django.db import transaction
@@ -29,6 +30,17 @@ class QuestionInline(admin.TabularInline):
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "color", "is_active")
+    readonly_fields = ("color",)
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            return ("name", "is_active")
+        return ("name", "color", "is_active")
+
+    def save_model(self, request, obj, form, change):
+        if not obj.color:
+            obj.color = f"#{random.randint(0, 0xFFFFFF):06X}"
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Topic)
