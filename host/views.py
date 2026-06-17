@@ -8,6 +8,7 @@ from django.db import transaction
 from django.http import HttpResponseBadRequest
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
@@ -33,6 +34,7 @@ def display(request):
     return render(request, 'host/display.html', {'game_id': game_id})
 
 
+@ensure_csrf_cookie
 def control(request):
     games = Game.objects.exclude(status=Game.Status.FINISHED).order_by("-created_at")
     return render(request, "host/control.html", {"games": games})
