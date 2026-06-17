@@ -11,7 +11,17 @@
 <div id="battle-banner" hidden aria-live="polite">
     <div class="battle-name">- vs -</div>
     <div class="battle-topic"></div>
-    <div class="battle-timers">00:00 · 00:00</div>
+    <div class="battle-timers">
+        <span class="player-timer" id="banner-attacker-block">
+            <span id="banner-attacker-name" class="player-timer-name">—</span>
+            <span id="banner-attacker-time">00:00</span>
+        </span>
+        <span class="timer-sep"> · </span>
+        <span class="player-timer" id="banner-defender-block">
+            <span id="banner-defender-name" class="player-timer-name">—</span>
+            <span id="banner-defender-time">00:00</span>
+        </span>
+    </div>
 </div>
 <section id="battle-question-screen" hidden aria-live="polite">
     <div id="battle-question-card">
@@ -187,9 +197,28 @@
     .battle-timers {
         margin-top: 0.45rem;
         font-size: clamp(1.4rem, 3vw, 3rem);
-        color: #ffe600;
         font-weight: 900;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.2em;
     }
+    .player-timer {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.3em;
+        color: #555;
+        transition: color 0.2s;
+    }
+    .player-timer.active {
+        color: #ffe600;
+    }
+    .player-timer .player-timer-name {
+        font-size: 0.55em;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .timer-sep { color: #444; }
     .battle-topic {
         margin-top: 0.3rem;
         font-size: clamp(1rem, 2vw, 2rem);
@@ -298,7 +327,12 @@
     const battleBanner  = document.getElementById("battle-banner");
     const battleName    = battleBanner.querySelector(".battle-name");
     const battleTopicEl = battleBanner.querySelector(".battle-topic");
-    const battleTimers  = battleBanner.querySelector(".battle-timers");
+    const bannerAttackerBlock = document.getElementById("banner-attacker-block");
+    const bannerAttackerName  = document.getElementById("banner-attacker-name");
+    const bannerAttackerTime  = document.getElementById("banner-attacker-time");
+    const bannerDefenderBlock = document.getElementById("banner-defender-block");
+    const bannerDefenderName  = document.getElementById("banner-defender-name");
+    const bannerDefenderTime  = document.getElementById("banner-defender-time");
     const battleQuestionScreen = document.getElementById("battle-question-screen");
     const battleQuestionImage = document.getElementById("battle-question-image");
     const battleQuestionText = document.getElementById("battle-question-text");
@@ -329,7 +363,10 @@
         const elapsed = performance.now() - battleTimerState.receivedAt;
         const atkMs = battleTimerState.currentTurn === 'attacker' ? Math.max(0, battleTimerState.attackerMs - elapsed) : battleTimerState.attackerMs;
         const defMs = battleTimerState.currentTurn === 'defender' ? Math.max(0, battleTimerState.defenderMs - elapsed) : battleTimerState.defenderMs;
-        battleTimers.textContent = `${formatTimer(atkMs)} · ${formatTimer(defMs)}`;
+        bannerAttackerTime.textContent = formatTimer(atkMs);
+        bannerDefenderTime.textContent = formatTimer(defMs);
+        bannerAttackerBlock.classList.toggle("active", battleTimerState.currentTurn === 'attacker');
+        bannerDefenderBlock.classList.toggle("active", battleTimerState.currentTurn === 'defender');
     };
 
     const stopBattleTimer = () => {
@@ -490,13 +527,17 @@
         if (!battle) return;
 
         if (battle.status === "pending") {
-            battleStartPlayers.hidden = true;
+            battleStartAttacker.textContent = battle.attacker_name || "—";
+            battleStartDefender.textContent = battle.defender_name || "—";
+            battleStartPlayers.hidden = false;
             battleStartTopic.textContent = battle.defender_topic || "";
             battleStartDescription.textContent = battle.defender_topic_description || "";
             battleStartScreen.hidden = false;
         } else if (battle.active) {
             battleName.hidden = true;
             battleTopicEl.textContent = battle.defender_topic || "";
+            bannerAttackerName.textContent = battle.attacker_name || "—";
+            bannerDefenderName.textContent = battle.defender_name || "—";
             battleBanner.hidden = false;
             battleQuestionScreen.hidden = false;
             const imageUrl = battle.question_image_url || "";
