@@ -351,11 +351,11 @@ def ensure_current_question(battle: Battle) -> BattleQuestion | None:
     question = (
         Question.objects.filter(topic=target_topic)
         .exclude(id__in=asked_question_ids)
-        .order_by("id")
+        .order_by("?")
         .first()
     )
     if question is None:
-        question = Question.objects.filter(topic=target_topic).order_by("id").first()
+        question = Question.objects.filter(topic=target_topic).order_by("?").first()
     if question is None:
         return None
 
