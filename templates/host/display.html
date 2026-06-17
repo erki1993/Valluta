@@ -28,6 +28,7 @@
             <span id="battle-start-defender">—</span>
         </div>
         <div id="battle-start-topic"></div>
+        <div id="battle-start-description"></div>
     </div>
 </section>
 <section id="battle-result-screen" hidden aria-live="polite">
@@ -205,6 +206,14 @@
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
+    #battle-start-description {
+        margin-top: 0.5rem;
+        font-size: clamp(0.8rem, 1.6vw, 1.6rem);
+        color: #64748b;
+        font-weight: 600;
+        font-style: italic;
+        letter-spacing: 0.03em;
+    }
     #battle-start-screen, #battle-result-screen {
         position: fixed;
         inset: 0;
@@ -298,6 +307,7 @@
     const battleStartAttacker = document.getElementById("battle-start-attacker");
     const battleStartDefender = document.getElementById("battle-start-defender");
     const battleStartTopic = document.getElementById("battle-start-topic");
+    const battleStartDescription = document.getElementById("battle-start-description");
     const battleResultScreen = document.getElementById("battle-result-screen");
     const battleResultWinner = document.getElementById("battle-result-winner");
     const battleResultLoser = document.getElementById("battle-result-loser");
@@ -482,6 +492,7 @@
         if (battle.status === "pending") {
             battleStartPlayers.hidden = true;
             battleStartTopic.textContent = battle.defender_topic || "";
+            battleStartDescription.textContent = battle.defender_topic_description || "";
             battleStartScreen.hidden = false;
         } else if (battle.active) {
             battleName.hidden = true;

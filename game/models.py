@@ -22,6 +22,7 @@ class Player(models.Model):
 
 class Topic(models.Model):
     name = models.CharField(max_length=255)
+    description = models.CharField(max_length=500, blank=True, default="")
 
     def __str__(self):
         return self.name
