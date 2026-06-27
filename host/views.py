@@ -107,7 +107,7 @@ def _serialize_battle_state(battle: Battle | None) -> dict:
         "defender_topic": battle.defender.topic.name,
         "defender_topic_description": battle.defender.topic.description,
         "question_text": question.text if question else "",
-        "question_image_url": question.image_url if question else "",
+        "question_image_url": (question.image.url if question and question.image else question.image_url) if question else "",
         "answer_text": question.answer if question else "",
     }
 
@@ -218,7 +218,7 @@ def _serialize_game_state(game: Game | None) -> dict:
                 "is_current_turn": battle.current_turn == Battle.Turn.DEFENDER,
             },
             "question_text": question.text if question else "",
-            "question_image_url": question.image_url if question else "",
+            "question_image_url": (question.image.url if question and question.image else question.image_url) if question else "",
             "answer_text": question.answer if question else "",
             "defender_topic": battle.defender.topic.name,
         "defender_topic_description": battle.defender.topic.description,

@@ -31,6 +31,7 @@ class Topic(models.Model):
 class Question(models.Model):
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE, related_name="questions")
     text = models.TextField(blank=True, default="")
+    image = models.FileField(upload_to="questions/", blank=True)
     image_url = models.URLField(blank=True)
     answer = models.TextField()
 
