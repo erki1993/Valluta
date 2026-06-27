@@ -241,6 +241,7 @@
             <div id="battle-setup" hidden>
                 <h3>Start Battle</h3>
                 <p id="vs-line">—</p>
+                <p id="topic-line" style="font-size:0.85rem;color:#64748b;margin:0 0 0.6rem;">Topic: —</p>
                 <button id="start-battle-btn" type="button">Start Battle</button>
                 <p id="battle-start-msg" class="msg" aria-live="polite"></p>
             </div>
@@ -308,6 +309,7 @@
     const playersGrid      = document.getElementById("players-grid");
     const battleSetup      = document.getElementById("battle-setup");
     const vsLine           = document.getElementById("vs-line");
+    const topicLine        = document.getElementById("topic-line");
     const startBattleBtn   = document.getElementById("start-battle-btn");
     const battleStartMsg   = document.getElementById("battle-start-msg");
     const battlePanel      = document.getElementById("battle-panel");
@@ -432,6 +434,7 @@
             const atk = playersData.find(p => p.game_player_id === selectedAttackerId);
             const def = playersData.find(p => p.game_player_id === selectedDefenderId);
             vsLine.textContent = `${atk?.name ?? "?"} ⚔ ${def?.name ?? "?"}`;
+            topicLine.textContent = `Topic: ${def?.topic ?? "?"}`;
         }
     };
 

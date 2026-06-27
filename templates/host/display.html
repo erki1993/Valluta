@@ -88,6 +88,7 @@
         border-radius: 0;
         border: 0.45rem solid #050505;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         text-align: center;
@@ -96,6 +97,16 @@
         line-height: 1.1;
         font-weight: 900;
         text-shadow: 0 0.15rem 0.4rem rgba(0, 0, 0, 0.85);
+    }
+    .sq-name { display: block; }
+    .sq-topic {
+        display: block;
+        font-size: 0.45em;
+        font-weight: 600;
+        opacity: 0.75;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-top: 0.15em;
     }
     .battle-highlight {
         animation: battlePulse 1s infinite;
@@ -454,6 +465,7 @@
                 row: anchor.row,
                 col: anchor.col,
                 label: anchor.owner_name || "",
+                topic: anchor.owner_topic || "",
             });
         }
 
@@ -507,10 +519,10 @@
             }
         }
 
-        for (const { row, col, label } of labelAnchors) {
+        for (const { row, col, label, topic } of labelAnchors) {
             const squareEl = gameGrid.children[(row * GRID_SIZE) + col];
             if (squareEl) {
-                squareEl.textContent = label;
+                squareEl.innerHTML = `<span class="sq-name">${label}</span>${topic ? `<span class="sq-topic">${topic}</span>` : ""}`;
             }
         }
     };

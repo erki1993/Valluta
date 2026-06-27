@@ -144,12 +144,14 @@ def _serialize_game_state(game: Game | None) -> dict:
     ):
         owner_name = square.owner.player.name if square.owner_id else None
         owner_color = square.owner.player.color if square.owner_id else None
+        owner_topic = square.owner.topic.name if square.owner_id else None
         payload = {
             "row": square.row,
             "col": square.col,
             "owner_game_player_id": square.owner_id,
             "owner_name": owner_name,
             "owner_color": owner_color,
+            "owner_topic": owner_topic,
         }
         squares.append(payload)
 
@@ -238,6 +240,7 @@ def _serialize_game_state(game: Game | None) -> dict:
                 "game_player_id": game_player.id,
                 "name": game_player.player.name,
                 "color": game_player.player.color,
+                "topic": game_player.topic.name,
                 "score": owner_counts.get(game_player.id, 0),
                 "is_eliminated": game_player.is_eliminated,
             }
