@@ -545,6 +545,7 @@
             battleStartTopic.textContent = battle.defender_topic || "";
             battleStartDescription.textContent = battle.defender_topic_description || "";
             battleStartScreen.hidden = false;
+            (battle.topic_image_urls || []).forEach(url => { new Image().src = url; });
         } else if (battle.active) {
             battleName.hidden = true;
             battleTopicEl.textContent = battle.defender_topic || "";

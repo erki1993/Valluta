@@ -189,6 +189,11 @@ def _serialize_game_state(game: Game | None) -> dict:
             )
 
         question = current_question.question if current_question else None
+        topic_image_urls = [
+            q.image.url if q.image else q.image_url
+            for q in battle.defender.topic.questions.all()
+            if q.image or q.image_url
+        ]
         battle_payload = {
             "active": battle.status == Battle.Status.ACTIVE,
             "battle_id": battle.id,
@@ -197,6 +202,7 @@ def _serialize_game_state(game: Game | None) -> dict:
             "current_turn": battle.current_turn,
             "attacker_name": battle.attacker.player.name,
             "defender_name": battle.defender.player.name,
+            "topic_image_urls": topic_image_urls,
             "attacker_timer": _format_timer(battle.attacker_time_remaining_ms),
             "defender_timer": _format_timer(battle.defender_time_remaining_ms),
             "attacker_timer_ms": battle.attacker_time_remaining_ms,
