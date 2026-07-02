@@ -547,26 +547,38 @@
         }
     };
 
+    const HEARTBEAT_TIMEOUT_MS = 3000;
+    let heartbeatTimer = null;
+    let currentGameId = null;
+
+    const resetHeartbeat = () => {
+        clearTimeout(heartbeatTimer);
+        heartbeatTimer = setTimeout(() => { if (ws) ws.close(); }, HEARTBEAT_TIMEOUT_MS);
+    };
+
     const connectWebSocket = (gameId) => {
+        clearTimeout(heartbeatTimer);
         if (ws) { ws.close(); ws = null; }
         if (!gameId) return;
+        currentGameId = gameId;
 
         const scheme = location.protocol === "https:" ? "wss" : "ws";
         ws = new WebSocket(`${scheme}://${location.host}/ws/game/${gameId}/`);
 
         ws.addEventListener("message", (event) => {
-            const state = JSON.parse(event.data);
-            renderGameState(state);
-            renderBattleState(state.battle);
+            const data = JSON.parse(event.data);
+            resetHeartbeat();
+            if (data.heartbeat) return;
+            renderGameState(data);
+            renderBattleState(data.battle);
         });
         ws.addEventListener("close", () => {
+            clearTimeout(heartbeatTimer);
             stopTimerCountdown();
-            battleMsg.textContent = "Connection closed. Reload to reconnect.";
+            battleMsg.textContent = "Reconnecting…";
+            setTimeout(() => { if (currentGameId === gameId) connectWebSocket(gameId); }, 1000);
         });
-        ws.addEventListener("error", () => {
-            stopTimerCountdown();
-            battleMsg.textContent = "Connection error.";
-        });
+        ws.addEventListener("error", () => ws.close());
     };
 
     // --- Event handlers ---

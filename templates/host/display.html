@@ -639,32 +639,46 @@
 
     const GAME_ID = {{ game_id|default:"null" }};
     const WS_SCHEME = location.protocol === "https:" ? "wss" : "ws";
+    const HEARTBEAT_TIMEOUT_MS = 3000;
 
     if (GAME_ID) {
-        const ws = new WebSocket(`${WS_SCHEME}://${location.host}/ws/game/${GAME_ID}/`);
+        let ws = null;
+        let heartbeatTimer = null;
 
-        ws.addEventListener("message", (event) => {
-            const state = JSON.parse(event.data);
-            renderState(state);
-        });
+        const onStale = () => {
+            if (ws) { ws.close(); }
+        };
 
-        ws.addEventListener("close", () => {
-            stopBattleTimer();
-            battleQuestionScreen.hidden = true;
-            battleBanner.hidden = false;
-            battleName.hidden = false;
-            battleName.textContent = "Waiting for game state";
-            battleTimers.textContent = "Connection closed";
-        });
+        const resetHeartbeat = () => {
+            clearTimeout(heartbeatTimer);
+            heartbeatTimer = setTimeout(onStale, HEARTBEAT_TIMEOUT_MS);
+        };
 
-        ws.addEventListener("error", () => {
-            stopBattleTimer();
-            battleQuestionScreen.hidden = true;
-            battleBanner.hidden = false;
-            battleName.hidden = false;
-            battleName.textContent = "Waiting for game state";
-            battleTimers.textContent = "Connection issue";
-        });
+        const connect = () => {
+            ws = new WebSocket(`${WS_SCHEME}://${location.host}/ws/game/${GAME_ID}/`);
+
+            ws.addEventListener("message", (event) => {
+                const data = JSON.parse(event.data);
+                resetHeartbeat();
+                if (data.heartbeat) return;
+                renderState(data);
+            });
+
+            ws.addEventListener("close", () => {
+                clearTimeout(heartbeatTimer);
+                stopBattleTimer();
+                battleQuestionScreen.hidden = true;
+                battleBanner.hidden = false;
+                battleName.hidden = false;
+                battleName.textContent = "Reconnecting…";
+                battleTimers.textContent = "";
+                setTimeout(connect, 1000);
+            });
+
+            ws.addEventListener("error", () => ws.close());
+        };
+
+        connect();
     } else {
         battleQuestionScreen.hidden = true;
         battleBanner.hidden = false;
